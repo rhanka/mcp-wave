@@ -24,12 +24,43 @@ export class TaxRatesLoader {
         "Add the YAML table for this jurisdiction/year to data/tax-rates/",
       );
     }
-    const parsed = TaxRatesSchema.safeParse(parseYaml(raw));
+    let yaml: unknown;
+    try {
+      yaml = parseYaml(raw);
+    } catch (error) {
+      throw new ToolError(
+        "TAX_RATES_INVALID",
+        {
+          jurisdiction,
+          year,
+          file,
+          reason: "YAML_PARSE_ERROR",
+          message: error instanceof Error ? error.message : String(error),
+        },
+        "Fix the YAML syntax in the tax rates table.",
+      );
+    }
+    const parsed = TaxRatesSchema.safeParse(yaml);
     if (!parsed.success) {
       throw new ToolError(
         "TAX_RATES_INVALID",
-        { jurisdiction, year, issues: parsed.error.issues },
+        {
+          jurisdiction,
+          year,
+          file,
+          reason: "SCHEMA_VALIDATION_FAILED",
+          issues: parsed.error.issues,
+        },
         "Fix the YAML to match the schema in src/domain/tax/schema.ts",
+      );
+    }
+    const requested = { jurisdiction, year };
+    const actual = { jurisdiction: parsed.data.jurisdiction, year: parsed.data.year };
+    if (actual.jurisdiction.toLowerCase() !== jurisdiction.toLowerCase() || actual.year !== year) {
+      throw new ToolError(
+        "TAX_RATES_INVALID",
+        { jurisdiction, year, file, reason: "TABLE_IDENTITY_MISMATCH", requested, actual },
+        "Ensure the YAML jurisdiction/year match the requested jurisdiction/year.",
       );
     }
     this.cache.set(key, parsed.data);
@@ -45,8 +76,8 @@ export class TaxRatesLoader {
       const m = f.match(/^.+-(\d{4})\.yaml$/);
       if (!m?.[1]) continue;
       const year = Number(m[1]);
-      const table = await this.load(jurisdiction, year).catch(() => null);
-      if (table && isoDate >= table.effective_from && isoDate <= table.effective_to) {
+      const table = await this.load(jurisdiction, year);
+      if (isoDate >= table.effective_from && isoDate <= table.effective_to) {
         return table;
       }
     }
