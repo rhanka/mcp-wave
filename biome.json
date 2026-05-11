@@ -2,7 +2,14 @@
   "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true },
   "files": {
-    "ignore": ["dist", "coverage", "src/wave/generated", "node_modules"]
+    "ignore": [
+      "dist",
+      "coverage",
+      "src/wave/generated",
+      "node_modules",
+      "data/wave-schema.graphql",
+      "package-lock.json"
+    ]
   },
   "formatter": {
     "enabled": true,
