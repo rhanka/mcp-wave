@@ -510,56 +510,82 @@ Not idempotent. A second call creates a second DRAFT. Acceptable because DRAFTs 
 
 ## 10. Workflow: `split_payroll_remittance`
 
+> **Revised 2026-05-10 after schema introspection.** Wave's public GraphQL has
+> **no** `moneyTransactionSplit` and **no** `moneyTransactionCategorize`
+> mutation. The supported pattern is to *create* the bank transaction with
+> multiple line items (one per remittance authority) using
+> `moneyTransactionCreate` (BETA — see §10.5). Already-imported single-line
+> bank transactions cannot be split via the API and must be edited in the
+> Wave UI. The workflow below reflects the new pattern; the previous
+> "fetch + split" algorithm is removed.
+
 ### Scenario
 
-User: *"Split the PayrollProvider Nov 15 transaction: $3,200 federal, $1,620 Quebec — total $4,820."*
+User: *"Post my PayrollProvider Nov 15 remittance: $3,200 federal, $1,620 Quebec — total $4,820."*
 
 ```ts
 split_payroll_remittance({
-  transaction_id: "txn_xyz",
+  business_id: "biz_x",                   // optional, defaults to env
+  date: "2026-11-15",
+  bank_account_id: "acct_bank",           // the bank/credit account being debited
+  description: "PayrollProvider payroll remittance",
   jurisdiction: "CA-QC",
+  period_year: 2026,
   buckets: {
     CRA: { amount: 3200.00 },
     RQ:  { amount: 1620.00 },
   },
   memo_prefix: "Nov 2026 payroll DAS",
+  external_id: "payrollprovider-2026-11-15",    // optional; auto-uuid if omitted
 })
 ```
 
 ### Accounting effect
 
-Wave records the bank debit as a single line. The tool splits the categorization side into two payable accounts:
+The tool posts a single multi-line money transaction: the bank account is
+the anchor (DECREASE), and each remittance authority gets its own payable
+account line (INCREASE):
 
 ```
-Before:                          After:
-─────────                        ─────
-CR Bank          4 820           CR Bank                       4 820
-DR Uncategorized 4 820           DR Federal taxes payable      3 200
-                                 DR Quebec taxes payable       1 620
+CR Bank                       4 820   (anchor, DECREASE)
+DR Federal taxes payable      3 200   (line, INCREASE)
+DR Quebec  taxes payable      1 620   (line, INCREASE)
 ```
 
 ### Signature
 
 ```ts
 {
-  transaction_id: string;
+  business_id?: string;                  // defaults to WAVE_DEFAULT_BUSINESS_ID
+  date: string;                          // YYYY-MM-DD
+  bank_account_id: string;               // anchor account, debited
+  description: string;
   jurisdiction: string;
+  period_year: number;                   // used to load the correct rates table
   buckets: Record<string, { amount: number; memo?: string }>;
   memo_prefix?: string;
+  external_id?: string;                  // idempotency key; auto-uuid if omitted
+  notes?: string;
   tolerance_cents?: number;          // default 1
-  force_resplit?: boolean;           // default false
 }
 ```
 
-### Algorithm (~90 lines)
+`force_resplit` is gone: there is nothing to overwrite — every call posts a
+brand-new transaction. Idempotency relies on `external_id`. Re-posting the
+same `external_id` returns `EXTERNAL_ID_ALREADY_USED`.
+
+### Algorithm (~80 lines)
 
 1. Load `data/tax-rates/<jurisdiction>-<year>.yaml`. Validate every bucket key exists in `remittance_authorities`.
 2. Load `data/account-mapping/default.yaml`. Validate every bucket has a `payable_account_id`.
-3. Fetch transaction. If already split (>1 split) and `force_resplit` is false → reject.
-4. Validate Σ buckets ≈ |transaction.amount|, tolerance = `tolerance_cents / 100`.
-5. Build splits: one per bucket, `account_id` from mapping, `memo` from `memo_prefix + " — " + authority.name`.
-6. `wave.transactions.split(transaction_id, splits)`.
-7. Return updated transaction with annotated splits.
+3. Compute the total = Σ buckets. Validate ≥ 0 within `tolerance_cents`.
+4. Generate `externalId` if absent: `crypto.randomUUID()`.
+5. Build the `MoneyTransactionCreateInput`:
+   - `anchor` = `{ accountId: bank_account_id, balance: DECREASE, amount: total }`
+   - one `MoneyTransactionCreateLineItemInput` per bucket: `{ accountId: <payable>, balance: INCREASE, amount, description: memo_prefix + " — " + authority.name }`
+6. Call `moneyTransactionCreate({ input })`. Map `inputErrors[]` to typed
+   `ToolError`s (notably `EXTERNAL_ID_ALREADY_USED`).
+7. Return the created transaction with annotated line items.
 
 ### Error catalog
 
@@ -567,17 +593,31 @@ DR Uncategorized 4 820           DR Federal taxes payable      3 200
 |---|---|
 | `UNKNOWN_AUTHORITY_CODE` | bucket key not in jurisdiction table |
 | `MISSING_ACCOUNT_MAPPING` | mapping file lacks the authority |
-| `TRANSACTION_NOT_FOUND` | bad `transaction_id` |
-| `ALREADY_SPLIT` | refuse without `force_resplit: true` |
+| `EXTERNAL_ID_ALREADY_USED` | the `external_id` was already posted (idempotency hit) |
+| `CLASSIC_ACCOUNTING_NOT_SUPPORTED` | business is on Classic Accounting (deprecated by Wave but still gates this mutation) |
+| `BANK_ACCOUNT_NOT_FOUND` | `bank_account_id` does not resolve |
 | `SPLIT_SUM_MISMATCH` | Σ ≠ total, beyond tolerance |
 | `WAVE_PERMISSION_DENIED` | token lacks transaction write |
 
 ### Safety contract
 
-- **No tax math by the LLM.** The tool does not estimate the breakdown. If Claude does not know the amounts, it asks the user, who has them in their payroll register.
+- **No tax math by the LLM.** The tool does not estimate the breakdown. If
+  Claude does not know the amounts, it asks the user, who has them in their
+  payroll register.
 - **Sum tolerance** = 1¢ default. Multi-tax rounding can exceed this; the user can pass `tolerance_cents: 5` explicitly, recorded in `warnings`.
-- **No re-split** without explicit `force_resplit`.
-- **Atomic** — Wave's split mutation is transactional, so either all splits land or none.
+- **Idempotent.** `external_id` (or auto-uuid) guarantees the same call
+  posts only once. Replays return `EXTERNAL_ID_ALREADY_USED`.
+- **Atomic.** `moneyTransactionCreate` posts all line items as a single
+  transaction or fails entirely.
+
+### 10.5 Limitation: imported single-line bank transactions
+
+If the bank transaction is already in Wave (imported by bank feed) as a
+single-line entry, **the API cannot split it**. The Wave UI must be used.
+Document this in the README and surface it as a clear error if the user
+passes a `transaction_id` instead of building from scratch (the tool's
+input schema does not accept `transaction_id`, so the typing prevents the
+attempt).
 
 ### v1.1 evolution: detailed mode
 
@@ -585,12 +625,12 @@ When `tax_code_to_account` is populated in the mapping, the tool accepts:
 
 ```ts
 {
-  transaction_id, jurisdiction,
+  date, bank_account_id, description, jurisdiction, period_year,
   taxes: { CIT: 1800, EI: 250, QPP_employer: 600, PIT: 950, QPIP: 80, QPP_employee: 600 }
 }
 ```
 
-The algorithm groups by `payroll_taxes[].remits_to` if only buckets are mapped, or splits per code if each tax has its own `account_id`. Same surface, adaptive behavior.
+The algorithm groups by `payroll_taxes[].remits_to` if only buckets are mapped, or splits per code if each tax has its own `account_id`. Same surface, adaptive behavior; still routed through `moneyTransactionCreate`.
 
 ## 11. Auth — `WaveCredentialProvider`
 
