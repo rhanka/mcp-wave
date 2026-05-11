@@ -3,7 +3,8 @@
   "compilerOptions": {
     "noEmit": false,
     "declaration": false,
-    "sourceMap": true
+    "sourceMap": true,
+    "rootDir": "src"
   },
   "include": ["src/**/*"],
   "exclude": ["src/**/*.test.ts", "tests/**/*"]
