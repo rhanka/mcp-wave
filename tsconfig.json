@@ -18,7 +18,6 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "outDir": "dist",
-    "rootDir": "src",
     "baseUrl": ".",
     "types": ["node"]
   },

@@ -30,9 +30,7 @@ export type AppEnv = z.infer<typeof envSchema>;
 export function parseEnv(source: Record<string, string | undefined> = process.env): AppEnv {
   const parsed = envSchema.safeParse(source);
   if (!parsed.success) {
-    const issues = parsed.error.issues
-      .map((i) => `${i.path.join(".")}: ${i.message}`)
-      .join("\n  ");
+    const issues = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("\n  ");
     throw new Error(`Invalid environment configuration:\n  ${issues}`);
   }
   return parsed.data;
