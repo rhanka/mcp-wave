@@ -19,7 +19,8 @@
     "codegen": "graphql-codegen --config codegen.yml",
     "dev:stdio": "tsx watch src/entrypoints/stdio.ts",
     "dev:http": "tsx watch src/entrypoints/http.ts",
-    "check": "npm run lint && npm run typecheck && npm run test"
+    "check": "npm run lint && npm run typecheck && npm run test",
+    "codegen:introspect": "node --env-file-if-exists=.env node_modules/@graphql-codegen/cli/cjs/bin.js --config codegen.introspect.yml"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
