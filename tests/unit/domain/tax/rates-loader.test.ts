@@ -36,12 +36,53 @@ describe("TaxRatesLoader", () => {
 
   it("throws TAX_RATES_INVALID on schema violations", async () => {
     const loader = new TaxRatesLoader(fixtureDir("jurisdiction: CA-QC\n"));
+    await expect(loader.load("CA-QC", 2026)).rejects.toMatchObject({
+      code: "TAX_RATES_INVALID",
+    });
     await expect(loader.load("CA-QC", 2026)).rejects.toBeInstanceOf(ToolError);
+  });
+
+  it("throws TAX_RATES_INVALID on malformed YAML", async () => {
+    const loader = new TaxRatesLoader(fixtureDir("jurisdiction: [\n"));
+    await expect(loader.load("CA-QC", 2026)).rejects.toMatchObject({
+      code: "TAX_RATES_INVALID",
+    });
+  });
+
+  it("throws TAX_RATES_INVALID when table identity does not match the requested key", async () => {
+    const loader = new TaxRatesLoader(
+      fixtureDir(
+        VALID.replace("jurisdiction: CA-QC", "jurisdiction: US-CA").replace(
+          "year: 2026",
+          "year: 2025",
+        ),
+      ),
+    );
+    await expect(loader.load("CA-QC", 2026)).rejects.toMatchObject({
+      code: "TAX_RATES_INVALID",
+      details: {
+        requested: { jurisdiction: "CA-QC", year: 2026 },
+        actual: { jurisdiction: "US-CA", year: 2025 },
+      },
+    });
   });
 
   it("loadForDate finds the table whose period covers the given date", async () => {
     const loader = new TaxRatesLoader(fixtureDir(VALID));
     const r = await loader.loadForDate("CA-QC", "2026-06-15");
     expect(r.year).toBe(2026);
+  });
+
+  it("loadForDate includes effective_from and effective_to dates", async () => {
+    const loader = new TaxRatesLoader(fixtureDir(VALID));
+    await expect(loader.loadForDate("CA-QC", "2026-01-01")).resolves.toMatchObject({ year: 2026 });
+    await expect(loader.loadForDate("CA-QC", "2026-12-31")).resolves.toMatchObject({ year: 2026 });
+  });
+
+  it("loadForDate propagates invalid candidate table errors", async () => {
+    const loader = new TaxRatesLoader(fixtureDir("jurisdiction: CA-QC\n"));
+    await expect(loader.loadForDate("CA-QC", "2026-06-15")).rejects.toMatchObject({
+      code: "TAX_RATES_INVALID",
+    });
   });
 });
