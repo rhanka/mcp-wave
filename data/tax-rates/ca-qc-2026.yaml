@@ -1,0 +1,27 @@
+# Numerical values are placeholders to be confirmed by a Quebec payroll
+# professional or against current CRA / Revenu Québec publications before
+# any production split is computed.
+jurisdiction: CA-QC
+year: 2026
+effective_from: 2026-01-01
+effective_to: 2026-12-31
+
+remittance_authorities:
+  - { code: CRA, name: "Receiver General of Canada", level: federal }
+  - { code: RQ,  name: "Revenu Québec",              level: regional }
+
+payroll_taxes:
+  - { code: CIT,    name: "Federal income tax",        remits_to: CRA, type: withheld }
+  - { code: PIT,    name: "Quebec income tax",         remits_to: RQ,  type: withheld }
+  - { code: QPP,    name: "Quebec Pension Plan",       remits_to: RQ,  type: both,
+      employer_rate: 0.064, employee_rate: 0.064, pensionable_max: 71300, basic_exemption: 3500 }
+  - { code: EI,     name: "Employment Insurance",      remits_to: CRA, type: both,
+      employee_rate: 0.0166, employer_factor: 1.4, insurable_max: 65700 }
+  - { code: QPIP,   name: "Quebec Parental Insurance", remits_to: RQ,  type: both,
+      employer_rate: 0.00692, employee_rate: 0.00494, insurable_max: 98000 }
+  - { code: FSS,    name: "Health Services Fund (QC)", remits_to: RQ,  type: employer_only }
+  - { code: CNESST, name: "CNESST",                    remits_to: RQ,  type: employer_only }
+
+sales_taxes:
+  - { code: GST, name: "GST", rate: 0.05,    remits_to: CRA }
+  - { code: QST, name: "QST", rate: 0.09975, remits_to: RQ }
