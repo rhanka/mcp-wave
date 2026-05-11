@@ -29,7 +29,7 @@ The OAuth subscription gate is a **new restriction** since the spec was drafted.
 ### Invoices
 
 - `invoiceCreate`, `invoicePatch`, `invoiceClone`, `invoiceDelete`, `invoiceSend`, `invoiceApprove`, `invoiceMarkSent` ✓ as planned
-- **`invoiceManualPaymentCreate`** ← record a manual payment against an invoice. **Replaces the `NOT_IMPLEMENTED` stub in Task B5** (`mark_invoice_paid`). Re-plan: `mark_invoice_paid` becomes a one-liner over this mutation; Task B11 `match_transaction_to_invoice` is no longer needed for the v1 payment-recording workflow.
+- **`invoicePaymentCreateManual`** ← record a manual payment against an invoice. Input type is `InvoicePaymentCreateManualInput { amount: Decimal!, exchangeRate: Decimal!, invoiceId: ID!, memo: String, paymentAccountId: ID!, paymentDate: Date!, paymentMethod: InvoicePaymentMethod! }`. **Replaces the `NOT_IMPLEMENTED` stub in Task B5** (`mark_invoice_paid`). Re-plan: `mark_invoice_paid` becomes a one-liner over this mutation; Task B11 `match_transaction_to_invoice` is no longer needed for the v1 payment-recording workflow.
 - `invoicePaymentUpdate`, `invoicePaymentDelete`, `InvoicePaymentReceiptSend` (note PascalCase on the last one) — relevant for v1.1.
 
 ### Customers / Accounts / Sales Tax / Products
@@ -53,7 +53,7 @@ All as planned: `customerCreate/Patch/Delete`, `accountCreate/Archive/Patch`, `s
 
 ### Impact A — `mark_invoice_paid` simplifies dramatically
 
-**Task B5 in the plan** currently ships as a `NOT_IMPLEMENTED` stub and references composing `create_transaction` + `match_transaction_to_invoice`. Replace with a thin wrapper over `invoiceManualPaymentCreate(input: { invoiceId, amount, paymentDate, accountId, memo? })`. Schema of input must be confirmed via introspection.
+**Task B5 in the plan** currently ships as a `NOT_IMPLEMENTED` stub and references composing `create_transaction` + `match_transaction_to_invoice`. Replace with a thin wrapper over `invoicePaymentCreateManual(input: InvoicePaymentCreateManualInput)`. Required fields (verified post-introspection): `invoiceId`, `amount`, `paymentDate`, `paymentAccountId`, `paymentMethod`, `exchangeRate` (1.0 when same currency), optional `memo`.
 
 **Task B11** (`match_transaction_to_invoice`) becomes optional for v1 — keep it for completeness if Wave provides the mutation, but it's no longer on the critical path for the `mark_invoice_paid` workflow.
 
