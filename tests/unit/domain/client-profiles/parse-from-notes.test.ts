@@ -96,6 +96,17 @@ not: { valid: yaml: at all
     }
   });
 
+  it("returns a YAML mapping error for scalar YAML values", () => {
+    const notes = `---mcp-wave---
+42
+---mcp-wave---`;
+    const r = parseProfileFromNotes(notes);
+    expect(r.kind).toBe("parse_error");
+    if (r.kind === "parse_error") {
+      expect(r.issues).toEqual([{ path: "<yaml>", message: "expected a YAML mapping" }]);
+    }
+  });
+
   it("treats null/undefined notes as absent", () => {
     expect(parseProfileFromNotes(null).kind).toBe("absent");
     expect(parseProfileFromNotes(undefined).kind).toBe("absent");
