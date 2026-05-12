@@ -63,6 +63,28 @@ send_to:
     expect(parseProfileFromNotes(notes)).toEqual({ kind: "absent" });
   });
 
+  it("skips embedded false markers and parses a later standalone profile block", () => {
+    const notes = `prefix ---mcp-wave---
+alias: ignored
+currency: CAD
+send_to:
+  - ignored@example.com
+---mcp-wave---
+
+---mcp-wave---
+alias: acme
+currency: CAD
+send_to:
+  - billing@example.com
+---mcp-wave---`;
+    const r = parseProfileFromNotes(notes);
+    expect(r.kind).toBe("ok");
+    if (r.kind === "ok") {
+      expect(r.profile.alias).toBe("acme");
+      expect(r.profile.send_to).toEqual(["billing@example.com"]);
+    }
+  });
+
   it("returns parse_error with Zod issues on schema violations", () => {
     const notes = `---mcp-wave---
 alias: ACME
@@ -73,7 +95,10 @@ send_to:
     const r = parseProfileFromNotes(notes);
     expect(r.kind).toBe("parse_error");
     if (r.kind === "parse_error") {
-      expect(r.issues.length).toBeGreaterThan(0);
+      expect(r.issues).toContainEqual({
+        path: "alias",
+        message: "alias must be [a-z0-9-]+",
+      });
     }
   });
 

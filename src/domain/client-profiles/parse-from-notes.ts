@@ -2,6 +2,7 @@ import { parse as parseYaml } from "yaml";
 import { type ClientProfile, ClientProfileSchema } from "./schema.js";
 
 const MARKER_RE = /---mcp-wave---\s*\n([\s\S]*?)\n---mcp-wave---/;
+const MARKER_SCAN_RE = new RegExp(MARKER_RE, "g");
 
 export type ParseResult =
   | { kind: "absent" }
@@ -11,21 +12,31 @@ export type ParseResult =
 export function parseProfileFromNotes(notes: string | null | undefined): ParseResult {
   if (!notes) return { kind: "absent" };
 
-  const markerMatch = notes.match(MARKER_RE);
-  if (!markerMatch) return { kind: "absent" };
+  for (const markerMatch of notes.matchAll(MARKER_SCAN_RE)) {
+    if (!isStandaloneMarkerMatch(notes, markerMatch)) continue;
+    return parseProfileYaml(markerMatch[1] ?? "");
+  }
 
+  return { kind: "absent" };
+}
+
+function isStandaloneMarkerMatch(notes: string, markerMatch: RegExpMatchArray): boolean {
   const matchStart = markerMatch.index;
-  if (matchStart === undefined) return { kind: "absent" };
-  if (matchStart > 0 && notes[matchStart - 1] !== "\n") return { kind: "absent" };
+  if (matchStart === undefined) return false;
+  if (matchStart > 0 && notes[matchStart - 1] !== "\n") return false;
 
   const nextCharacter = notes[matchStart + markerMatch[0].length];
   if (nextCharacter !== undefined && nextCharacter !== "\n" && nextCharacter !== "\r") {
-    return { kind: "absent" };
+    return false;
   }
 
+  return true;
+}
+
+function parseProfileYaml(profileYaml: string): ParseResult {
   let raw: unknown;
   try {
-    raw = parseYaml(markerMatch[1] ?? "");
+    raw = parseYaml(profileYaml);
   } catch (error) {
     return {
       kind: "parse_error",
