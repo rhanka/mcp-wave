@@ -14,6 +14,15 @@ export function parseProfileFromNotes(notes: string | null | undefined): ParseRe
   const markerMatch = notes.match(MARKER_RE);
   if (!markerMatch) return { kind: "absent" };
 
+  const matchStart = markerMatch.index;
+  if (matchStart === undefined) return { kind: "absent" };
+  if (matchStart > 0 && notes[matchStart - 1] !== "\n") return { kind: "absent" };
+
+  const nextCharacter = notes[matchStart + markerMatch[0].length];
+  if (nextCharacter !== undefined && nextCharacter !== "\n" && nextCharacter !== "\r") {
+    return { kind: "absent" };
+  }
+
   let raw: unknown;
   try {
     raw = parseYaml(markerMatch[1] ?? "");
