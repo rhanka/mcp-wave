@@ -2,7 +2,7 @@ import { parse as parseYaml } from "yaml";
 import { type ClientProfile, ClientProfileSchema } from "./schema.js";
 
 const MARKER_RE = /---mcp-wave---\s*\n([\s\S]*?)\n---mcp-wave---/;
-const MARKER_SCAN_RE = new RegExp(MARKER_RE, "g");
+const MARKER_TEXT = "---mcp-wave---";
 
 export type ParseResult =
   | { kind: "absent" }
@@ -12,25 +12,76 @@ export type ParseResult =
 export function parseProfileFromNotes(notes: string | null | undefined): ParseResult {
   if (!notes) return { kind: "absent" };
 
-  for (const markerMatch of notes.matchAll(MARKER_SCAN_RE)) {
-    if (!isStandaloneMarkerMatch(notes, markerMatch)) continue;
-    return parseProfileYaml(markerMatch[1] ?? "");
+  const markerLines = findMarkerLines(notes);
+  let firstParseError: ParseResult | undefined;
+  for (let markerIndex = 0; markerIndex < markerLines.length - 1; markerIndex += 1) {
+    const opener = markerLines[markerIndex];
+    const closer = markerLines[markerIndex + 1];
+    if (!opener?.canOpen || !closer?.canClose) continue;
+
+    const profileYaml = extractProfileYaml(notes, opener, closer);
+    if (profileYaml === null) continue;
+
+    const parsed = parseProfileYaml(profileYaml);
+    if (parsed.kind === "ok") return parsed;
+    firstParseError ??= parsed;
   }
 
-  return { kind: "absent" };
+  return firstParseError ?? { kind: "absent" };
 }
 
-function isStandaloneMarkerMatch(notes: string, markerMatch: RegExpMatchArray): boolean {
-  const matchStart = markerMatch.index;
-  if (matchStart === undefined) return false;
-  if (matchStart > 0 && notes[matchStart - 1] !== "\n") return false;
+type MarkerLine = {
+  canClose: boolean;
+  canOpen: boolean;
+  end: number;
+  start: number;
+};
 
-  const nextCharacter = notes[matchStart + markerMatch[0].length];
-  if (nextCharacter !== undefined && nextCharacter !== "\n" && nextCharacter !== "\r") {
-    return false;
+function findMarkerLines(notes: string): MarkerLine[] {
+  const markerLines: MarkerLine[] = [];
+  let searchStart = 0;
+  while (searchStart < notes.length) {
+    const markerStart = notes.indexOf(MARKER_TEXT, searchStart);
+    if (markerStart === -1) break;
+    searchStart = markerStart + MARKER_TEXT.length;
+    if (markerStart > 0 && notes[markerStart - 1] !== "\n") continue;
+
+    const markerEnd = markerStart + MARKER_TEXT.length;
+    markerLines.push({
+      canClose: isClosingBoundary(notes[markerEnd]),
+      canOpen: canOpenMarkerLine(notes, markerEnd),
+      end: markerEnd,
+      start: markerStart,
+    });
   }
 
-  return true;
+  return markerLines;
+}
+
+function canOpenMarkerLine(notes: string, markerEnd: number): boolean {
+  for (let cursor = markerEnd; cursor < notes.length; cursor += 1) {
+    const character = notes[cursor];
+    if (character === "\n") return true;
+    if (character === "\r" && notes[cursor + 1] === "\n") return true;
+    if (!isHorizontalWhitespace(character)) return false;
+  }
+
+  return false;
+}
+
+function isHorizontalWhitespace(character: string | undefined): boolean {
+  return character === " " || character === "\t" || character === "\f" || character === "\v";
+}
+
+function isClosingBoundary(character: string | undefined): boolean {
+  return character === undefined || character === "\n" || character === "\r";
+}
+
+function extractProfileYaml(notes: string, opener: MarkerLine, closer: MarkerLine): string | null {
+  const block = notes.slice(opener.start, closer.end);
+  const markerMatch = block.match(MARKER_RE);
+  if (markerMatch?.index !== 0 || markerMatch[0].length !== block.length) return null;
+  return markerMatch[1] ?? "";
 }
 
 function parseProfileYaml(profileYaml: string): ParseResult {

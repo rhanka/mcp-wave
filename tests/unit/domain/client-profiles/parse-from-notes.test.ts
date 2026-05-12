@@ -85,6 +85,24 @@ send_to:
     }
   });
 
+  it("does not consume a later standalone opener as the closer for an embedded false opener", () => {
+    const notes = `prefix ---mcp-wave---
+not a profile
+
+---mcp-wave---
+alias: acme
+currency: CAD
+send_to:
+  - billing@example.com
+---mcp-wave---`;
+    const r = parseProfileFromNotes(notes);
+    expect(r.kind).toBe("ok");
+    if (r.kind === "ok") {
+      expect(r.profile.alias).toBe("acme");
+      expect(r.profile.send_to).toEqual(["billing@example.com"]);
+    }
+  });
+
   it("returns parse_error with Zod issues on schema violations", () => {
     const notes = `---mcp-wave---
 alias: ACME
