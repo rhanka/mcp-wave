@@ -3,8 +3,6 @@ import { ClientProfileSchema } from "../../../../src/domain/client-profiles/sche
 
 const valid = {
   alias: "acme",
-  unit: "hours",
-  hourly_rate: 95,
   currency: "CAD",
   send_to: ["billing@example.com"],
 };
@@ -14,6 +12,7 @@ describe("ClientProfileSchema", () => {
     const r = ClientProfileSchema.safeParse(valid);
     expect(r.success).toBe(true);
     if (r.success) {
+      expect(r.data.unit).toBe("hours");
       expect(r.data.payment_terms_days).toBe(30);
       expect(r.data.language).toBe("en");
       expect(r.data.cc).toEqual([]);
