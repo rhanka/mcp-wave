@@ -29,6 +29,20 @@ trailing trivia`;
     }
   });
 
+  it("parses when the opening marker has trailing spaces", () => {
+    const notes = `---mcp-wave---   
+alias: acme
+currency: CAD
+send_to:
+  - billing@example.com
+---mcp-wave---`;
+    const r = parseProfileFromNotes(notes);
+    expect(r.kind).toBe("ok");
+    if (r.kind === "ok") {
+      expect(r.profile.alias).toBe("acme");
+    }
+  });
+
   it("returns parse_error with Zod issues on schema violations", () => {
     const notes = `---mcp-wave---
 alias: ACME
@@ -51,15 +65,30 @@ not: { valid: yaml: at all
     expect(r.kind).toBe("parse_error");
   });
 
+  it("returns a YAML mapping error for YAML sequences", () => {
+    const notes = `---mcp-wave---
+[]
+---mcp-wave---`;
+    const r = parseProfileFromNotes(notes);
+    expect(r.kind).toBe("parse_error");
+    if (r.kind === "parse_error") {
+      expect(r.issues).toEqual([{ path: "<yaml>", message: "expected a YAML mapping" }]);
+    }
+  });
+
   it("treats null/undefined notes as absent", () => {
     expect(parseProfileFromNotes(null).kind).toBe("absent");
     expect(parseProfileFromNotes(undefined).kind).toBe("absent");
   });
 
-  it("ignores text inside the block boundaries that is not a single YAML doc", () => {
+  it("returns parse_error when the matched YAML doc is empty", () => {
     const notes = `---mcp-wave---
+
 ---mcp-wave---`;
     const r = parseProfileFromNotes(notes);
     expect(r.kind).toBe("parse_error");
+    if (r.kind === "parse_error") {
+      expect(r.issues).toEqual([{ path: "<yaml>", message: "expected a YAML mapping" }]);
+    }
   });
 });

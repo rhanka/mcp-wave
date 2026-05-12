@@ -1,7 +1,7 @@
 import { parse as parseYaml } from "yaml";
 import { type ClientProfile, ClientProfileSchema } from "./schema.js";
 
-const MARKER_RE = /---mcp-wave---\r?\n([\s\S]*?)(?:\r?\n)?---mcp-wave---/;
+const MARKER_RE = /---mcp-wave---\s*\n([\s\S]*?)\n---mcp-wave---/;
 
 export type ParseResult =
   | { kind: "absent" }
@@ -29,7 +29,7 @@ export function parseProfileFromNotes(notes: string | null | undefined): ParseRe
     };
   }
 
-  if (raw === null || typeof raw !== "object") {
+  if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
     return {
       kind: "parse_error",
       issues: [{ path: "<yaml>", message: "expected a YAML mapping" }],
