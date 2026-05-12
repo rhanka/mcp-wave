@@ -1,6 +1,16 @@
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 import { computeInvoiceTotals } from "../../../../src/domain/invoice-templating/compute-totals.js";
+import { ToolError } from "../../../../src/lib/errors.js";
+
+function thrownBy(fn: () => unknown): unknown {
+  try {
+    fn();
+  } catch (error) {
+    return error;
+  }
+  throw new Error("Expected function to throw");
+}
 
 describe("computeInvoiceTotals", () => {
   it("single line, no tax", () => {
@@ -56,6 +66,21 @@ describe("computeInvoiceTotals", () => {
     expect(r.taxes_breakdown[0]?.amount).toBeCloseTo(4.33, 2);
   });
 
+  it("rejects unresolved tax codes with details", () => {
+    const error = thrownBy(() =>
+      computeInvoiceTotals({
+        lines: [{ quantity: 1, unit_price: 100, tax_codes: ["GST"] }],
+        taxes: [{ code: "QST", rate: 0.09975 }],
+        currency: "CAD",
+      }),
+    );
+    expect(error).toBeInstanceOf(ToolError);
+    expect(error).toMatchObject({
+      code: "TAX_CODE_NOT_RESOLVED",
+      details: { code: "GST", available: ["QST"] },
+    });
+  });
+
   it("property: total >= subtotal when all rates >= 0", () => {
     fc.assert(
       fc.property(
@@ -81,19 +106,30 @@ describe("computeInvoiceTotals", () => {
   });
 
   it("rejects negative quantity or price", () => {
-    expect(() =>
+    const negativeQuantity = thrownBy(() =>
       computeInvoiceTotals({
         lines: [{ quantity: -1, unit_price: 10, tax_codes: [] }],
         taxes: [],
         currency: "USD",
       }),
-    ).toThrow();
-    expect(() =>
+    );
+    expect(negativeQuantity).toBeInstanceOf(ToolError);
+    expect(negativeQuantity).toMatchObject({
+      code: "INVALID_LINE",
+      details: { index: 0, reason: "negative quantity" },
+    });
+
+    const negativeUnitPrice = thrownBy(() =>
       computeInvoiceTotals({
         lines: [{ quantity: 1, unit_price: -10, tax_codes: [] }],
         taxes: [],
         currency: "USD",
       }),
-    ).toThrow();
+    );
+    expect(negativeUnitPrice).toBeInstanceOf(ToolError);
+    expect(negativeUnitPrice).toMatchObject({
+      code: "INVALID_LINE",
+      details: { index: 0, reason: "negative unit_price" },
+    });
   });
 });
