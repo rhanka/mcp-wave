@@ -73,7 +73,7 @@ describe("computeInvoiceTotals", () => {
             taxes: [{ code: "X", rate }],
             currency: "USD",
           });
-          expect(r.total).toBeGreaterThanOrEqual(r.subtotal - 0.01);
+          expect(r.total).toBeGreaterThanOrEqual(r.subtotal);
         },
       ),
       { numRuns: 100 },
@@ -84,6 +84,13 @@ describe("computeInvoiceTotals", () => {
     expect(() =>
       computeInvoiceTotals({
         lines: [{ quantity: -1, unit_price: 10, tax_codes: [] }],
+        taxes: [],
+        currency: "USD",
+      }),
+    ).toThrow();
+    expect(() =>
+      computeInvoiceTotals({
+        lines: [{ quantity: 1, unit_price: -10, tax_codes: [] }],
         taxes: [],
         currency: "USD",
       }),
