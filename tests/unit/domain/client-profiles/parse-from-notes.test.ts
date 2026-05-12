@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseProfileFromNotes } from "../../../../src/domain/client-profiles/parse-from-notes.js";
 
 describe("parseProfileFromNotes", () => {
-  it("returns null when no marker is present", () => {
+  it("returns absent when no marker is present", () => {
     expect(parseProfileFromNotes("just free notes")).toEqual({ kind: "absent" });
   });
 
@@ -41,6 +41,26 @@ send_to:
     if (r.kind === "ok") {
       expect(r.profile.alias).toBe("acme");
     }
+  });
+
+  it("returns absent when the opening marker is embedded in text", () => {
+    const notes = `prefix ---mcp-wave---
+alias: acme
+currency: CAD
+send_to:
+  - billing@example.com
+---mcp-wave---`;
+    expect(parseProfileFromNotes(notes)).toEqual({ kind: "absent" });
+  });
+
+  it("returns absent when the closing marker has a suffix", () => {
+    const notes = `---mcp-wave---
+alias: acme
+currency: CAD
+send_to:
+  - billing@example.com
+---mcp-wave---not-a-marker`;
+    expect(parseProfileFromNotes(notes)).toEqual({ kind: "absent" });
   });
 
   it("returns parse_error with Zod issues on schema violations", () => {
