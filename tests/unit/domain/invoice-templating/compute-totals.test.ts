@@ -66,6 +66,28 @@ describe("computeInvoiceTotals", () => {
     expect(r.taxes_breakdown[0]?.amount).toBeCloseTo(4.33, 2);
   });
 
+  it("rounds half-cent tax amounts up consistently", () => {
+    const r = computeInvoiceTotals({
+      lines: [{ quantity: 1, unit_price: 201.5, tax_codes: ["GST"] }],
+      taxes: [{ code: "GST", rate: 0.05 }],
+      currency: "CAD",
+    });
+
+    expect(r.taxes_breakdown).toEqual([{ code: "GST", amount: 10.08 }]);
+    expect(r.total).toBe(211.58);
+  });
+
+  it("rounds exact half-cent values up consistently", () => {
+    const r = computeInvoiceTotals({
+      lines: [{ quantity: 1, unit_price: 10.075, tax_codes: [] }],
+      taxes: [],
+      currency: "CAD",
+    });
+
+    expect(r.subtotal).toBe(10.08);
+    expect(r.total).toBe(10.08);
+  });
+
   it("rejects unresolved tax codes with details", () => {
     const error = thrownBy(() =>
       computeInvoiceTotals({
