@@ -25,7 +25,10 @@ export interface InvoiceTotals {
 }
 
 function round2(n: number): number {
-  return Math.round((n + Number.EPSILON) * 100) / 100;
+  const [coefficient, exponent = "0"] = n.toString().split("e");
+  const shifted = Math.round(Number(`${coefficient}e${Number(exponent) + 2}`));
+  const [roundedCoefficient, roundedExponent = "0"] = shifted.toString().split("e");
+  return Number(`${roundedCoefficient}e${Number(roundedExponent) - 2}`);
 }
 
 export function computeInvoiceTotals(input: InvoiceTotalsInput): InvoiceTotals {
