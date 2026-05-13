@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ClientProfile } from "../../../../src/domain/client-profiles/schema.js";
 import { renderLines } from "../../../../src/domain/invoice-templating/render-lines.js";
+import { ToolError } from "../../../../src/lib/errors.js";
 
 const baseProfile: ClientProfile = {
   alias: "acme",
@@ -15,6 +16,15 @@ const baseProfile: ClientProfile = {
   language: "en",
   default_taxes: ["GST", "QST"],
 };
+
+function thrownBy(fn: () => unknown): unknown {
+  try {
+    fn();
+  } catch (error) {
+    return error;
+  }
+  throw new Error("Expected function to throw");
+}
 
 describe("renderLines", () => {
   it("renders a single line from profile defaults", () => {
@@ -44,7 +54,43 @@ describe("renderLines", () => {
   });
 
   it("throws MISSING_RATE when neither profile rate nor override is set", () => {
-    const profile = { ...baseProfile, hourly_rate: undefined } as ClientProfile;
-    expect(() => renderLines({ profile, quantity: 10 })).toThrow(/MISSING_RATE/);
+    const { hourly_rate: _hourlyRate, ...profile } = baseProfile;
+    expect(_hourlyRate).toBe(95);
+
+    const error = thrownBy(() => renderLines({ profile, quantity: 10 }));
+
+    expect(error).toBeInstanceOf(ToolError);
+    if (!(error instanceof ToolError)) {
+      throw new Error("Expected ToolError");
+    }
+    expect(error.code).toBe("MISSING_RATE");
+    expect(error.details.alias).toBe("acme");
+  });
+
+  it("omits product_id when profile default_product_id is omitted", () => {
+    const { default_product_id: _defaultProductId, ...profile } = baseProfile;
+    expect(_defaultProductId).toBe("prod_x");
+
+    const [line] = renderLines({ profile, quantity: 10 });
+
+    expect(line).toBeDefined();
+    expect(line).not.toHaveProperty("product_id");
+  });
+
+  it("copies tax_codes from profile defaults", () => {
+    const [line] = renderLines({ profile: baseProfile, quantity: 10 });
+
+    expect(line).toBeDefined();
+    if (line === undefined) {
+      throw new Error("Expected one rendered line");
+    }
+
+    expect(line.tax_codes).toEqual(baseProfile.default_taxes);
+    expect(line.tax_codes).not.toBe(baseProfile.default_taxes);
+
+    line.tax_codes.push("HST");
+
+    expect(line.tax_codes).toEqual(["GST", "QST", "HST"]);
+    expect(baseProfile.default_taxes).toEqual(["GST", "QST"]);
   });
 });
