@@ -6,6 +6,14 @@ import type { ToolContext } from "./tool-context.js";
 export interface McpToolResult {
   isError?: boolean;
   content: Array<{ type: "text"; text: string }>;
+  [key: string]: unknown;
+}
+
+export function envelopeFromError(err: ToolError): McpToolResult {
+  return {
+    isError: true,
+    content: [{ type: "text", text: JSON.stringify(err.toJSON()) }],
+  };
 }
 
 export function toMcpResult(
@@ -16,24 +24,43 @@ export function toMcpResult(
       const result = await tool.handler(input, ctx);
       return { content: [{ type: "text", text: JSON.stringify(result) }] };
     } catch (e) {
-      let err: ToolError;
       if (e instanceof ZodError) {
-        err = new ToolError(
+        const err = new ToolError(
           "INVALID_INPUT",
           { issues: e.issues.map((i) => ({ path: i.path.join("."), message: i.message })) },
           "Tool arguments did not match the schema.",
         );
-      } else {
-        err = normalizeError(e);
+        ctx.logger.warn(
+          { request_id: ctx.req.request_id, tool: tool.name, code: err.code },
+          "invalid tool input",
+        );
+        return envelopeFromError(err);
       }
-      ctx.logger.warn(
-        { request_id: ctx.req.request_id, tool: tool.name, code: err.code, details: err.details },
-        "tool error",
+      if (e instanceof ToolError) {
+        ctx.logger.warn(
+          {
+            request_id: ctx.req.request_id,
+            tool: tool.name,
+            code: e.code,
+            details: e.details,
+          },
+          "tool error",
+        );
+        return envelopeFromError(e);
+      }
+      const normalized = normalizeError(e);
+      ctx.logger.error(
+        {
+          request_id: ctx.req.request_id,
+          tool: tool.name,
+          message: normalized.details.message,
+          stack: normalized.details.stack,
+          value: normalized.details.value,
+        },
+        "unhandled tool error",
       );
-      return {
-        isError: true,
-        content: [{ type: "text", text: JSON.stringify(err.toJSON()) }],
-      };
+      const redacted = new ToolError("INTERNAL_ERROR", {}, "An unexpected error occurred.");
+      return envelopeFromError(redacted);
     }
   };
 }
