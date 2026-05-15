@@ -13,3 +13,7 @@ export function registerTools(...tools: RegisteredTool[]): void {
 export function findTool(name: string): RegisteredTool | undefined {
   return TOOLS.find((t) => t.name === name);
 }
+
+export function __clearToolsForTests(): void {
+  TOOLS.length = 0;
+}
