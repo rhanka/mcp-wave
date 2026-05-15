@@ -54,11 +54,38 @@ describe("buildMcpServer", () => {
     expect(JSON.parse(first.text)).toEqual({ greeting: "hello world" });
   });
 
-  it("returns UNKNOWN_TOOL when a missing tool is called", async () => {
+  it("returns UNKNOWN_TOOL as an isError envelope (not a thrown JSON-RPC error)", async () => {
     const { server } = buildMcpServer({ tools: [helloTool], makeCtx });
     const handler = getHandler(server, CallToolRequestSchema.shape.method.value);
-    await expect(
-      handler({ method: "tools/call", params: { name: "nope", arguments: {} } }),
-    ).rejects.toMatchObject({ code: "UNKNOWN_TOOL" });
+    const result = (await handler({
+      method: "tools/call",
+      params: { name: "nope", arguments: {} },
+    })) as { isError: boolean; content: Array<{ text: string }> };
+    expect(result.isError).toBe(true);
+    const first = result.content[0];
+    if (!first) throw new Error("expected content");
+    const body = JSON.parse(first.text) as { code: string; details: { name: string } };
+    expect(body.code).toBe("UNKNOWN_TOOL");
+    expect(body.details.name).toBe("nope");
+  });
+
+  it("dispatches a parameterless tool when arguments are omitted", async () => {
+    const pingTool = defineTool({
+      name: "ping",
+      description: "no input",
+      inputSchema: z.object({}),
+      async execute() {
+        return { ok: true };
+      },
+    });
+    const { server } = buildMcpServer({ tools: [pingTool], makeCtx });
+    const handler = getHandler(server, CallToolRequestSchema.shape.method.value);
+    const result = (await handler({
+      method: "tools/call",
+      params: { name: "ping" },
+    })) as { content: Array<{ text: string }> };
+    const first = result.content[0];
+    if (!first) throw new Error("expected content");
+    expect(JSON.parse(first.text)).toEqual({ ok: true });
   });
 });
