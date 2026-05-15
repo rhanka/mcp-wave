@@ -30,4 +30,27 @@ describe("AccountMappingLoader", () => {
     const loader = new AccountMappingLoader("/nonexistent");
     await expect(loader.load()).rejects.toMatchObject({ code: "ACCOUNT_MAPPING_MISSING" });
   });
+
+  it("throws ACCOUNT_MAPPING_INVALID on schema violations", async () => {
+    const loader = new AccountMappingLoader(fixture("jurisdiction: CA-QC\n"));
+    await expect(loader.load()).rejects.toMatchObject({
+      code: "ACCOUNT_MAPPING_INVALID",
+      details: { reason: "SCHEMA_VALIDATION_FAILED" },
+    });
+  });
+
+  it("throws ACCOUNT_MAPPING_INVALID on malformed YAML", async () => {
+    const loader = new AccountMappingLoader(fixture("jurisdiction: [\n"));
+    await expect(loader.load()).rejects.toMatchObject({
+      code: "ACCOUNT_MAPPING_INVALID",
+      details: { reason: "YAML_PARSE_ERROR" },
+    });
+  });
+
+  it("caches the mapping across calls", async () => {
+    const loader = new AccountMappingLoader(fixture(TWO_BUCKETS));
+    const first = await loader.load();
+    const second = await loader.load();
+    expect(second).toBe(first);
+  });
 });
