@@ -1,0 +1,22 @@
+overwrite: true
+schema: data/wave-schema.graphql
+documents:
+  - "src/wave/operations/**/*.gql"
+generates:
+  src/wave/generated/sdk.ts:
+    plugins:
+      - add:
+          content: "// @ts-nocheck — generated file; see codegen.yml"
+      - typescript
+      - typescript-operations
+      - typescript-graphql-request
+    config:
+      avoidOptionals: false
+      enumsAsTypes: true
+      skipTypename: true
+      scalars:
+        ID: string
+        Date: string
+        DateTime: string
+        Decimal: string
+        JSON: unknown

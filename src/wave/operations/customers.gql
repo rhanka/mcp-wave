@@ -1,0 +1,36 @@
+query ListCustomers($businessId: ID!, $pageSize: Int = 50, $page: Int = 1) {
+  business(id: $businessId) {
+    customers(pageSize: $pageSize, page: $page) {
+      pageInfo {
+        currentPage
+        totalPages
+        totalCount
+      }
+      edges {
+        node {
+          id
+          name
+          email
+          internalNotes
+          currency {
+            code
+          }
+        }
+      }
+    }
+  }
+}
+
+query GetCustomer($businessId: ID!, $customerId: ID!) {
+  business(id: $businessId) {
+    customer(id: $customerId) {
+      id
+      name
+      email
+      internalNotes
+      currency {
+        code
+      }
+    }
+  }
+}
