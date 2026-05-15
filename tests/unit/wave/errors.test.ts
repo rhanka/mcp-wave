@@ -30,9 +30,16 @@ describe("mapWaveGraphQLError", () => {
     expect(err.httpStatus).toBe(500);
   });
 
-  it("falls back to UNKNOWN for an unrecognized extension code", () => {
-    const err = mapWaveGraphQLError({ extensions: { code: "OUTSIDE_MAP" }, message: "?" });
+  it("keeps an unrecognized extension code but adopts the HTTP status hint", () => {
+    const err = mapWaveGraphQLError({ extensions: { code: "OUTSIDE_MAP" }, message: "?" }, 502);
     expect(err.waveCode).toBe("OUTSIDE_MAP");
-    expect(err.httpStatus).toBe(500);
+    expect(err.httpStatus).toBe(502);
+  });
+
+  it("derives the code from an HTTP status when extensions code is missing", () => {
+    expect(mapWaveGraphQLError(null, 429).waveCode).toBe("RATE_LIMITED");
+    expect(mapWaveGraphQLError({}, 401).waveCode).toBe("AUTHENTICATION_ERROR");
+    expect(mapWaveGraphQLError({}, 502).waveCode).toBe("INTERNAL_SERVER_ERROR");
+    expect(mapWaveGraphQLError({}, 422).waveCode).toBe("VALIDATION_ERROR");
   });
 });
