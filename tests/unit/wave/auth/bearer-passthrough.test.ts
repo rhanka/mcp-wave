@@ -50,8 +50,8 @@ describe("BearerHeaderProvider", () => {
 
   it("rejects when context has null headers (stdio)", async () => {
     const p = new BearerHeaderProvider();
-    await expect(
-      p.getToken({ headers: null, request_id: "x" }),
-    ).rejects.toMatchObject({ code: "AUTH_BEARER_MISSING" });
+    await expect(p.getToken({ headers: null, request_id: "x" })).rejects.toMatchObject({
+      code: "AUTH_BEARER_MISSING",
+    });
   });
 });
