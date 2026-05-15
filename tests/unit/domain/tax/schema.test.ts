@@ -26,6 +26,19 @@ describe("TaxRatesSchema", () => {
     expect(r.success).toBe(false);
   });
 
+  it("rejects sales_taxes referencing an unknown remits_to", () => {
+    const bad = { ...valid, sales_taxes: [{ ...valid.sales_taxes[0], remits_to: "NOPE" }] };
+    const r = TaxRatesSchema.safeParse(bad);
+    expect(r.success).toBe(false);
+    if (!r.success) {
+      expect(
+        r.error.issues.some(
+          (i) => i.path.join(".") === "sales_taxes.0.remits_to" && i.message.includes("NOPE"),
+        ),
+      ).toBe(true);
+    }
+  });
+
   it("rejects sales_taxes with negative rate", () => {
     const bad = { ...valid, sales_taxes: [{ ...valid.sales_taxes[0], rate: -0.05 }] };
     const r = TaxRatesSchema.safeParse(bad);
