@@ -1,0 +1,112 @@
+query ListInvoices(
+  $businessId: ID!
+  $page: Int = 1
+  $pageSize: Int = 50
+  $status: InvoiceStatus
+  $customerId: ID
+  $currency: CurrencyCode
+  $invoiceDateStart: Date
+  $invoiceDateEnd: Date
+) {
+  business(id: $businessId) {
+    invoices(
+      page: $page
+      pageSize: $pageSize
+      status: $status
+      customerId: $customerId
+      currency: $currency
+      invoiceDateStart: $invoiceDateStart
+      invoiceDateEnd: $invoiceDateEnd
+    ) {
+      pageInfo {
+        currentPage
+        totalPages
+        totalCount
+      }
+      edges {
+        node {
+          id
+          invoiceNumber
+          status
+          invoiceDate
+          dueDate
+          customer {
+            id
+            name
+          }
+          currency {
+            code
+          }
+          total {
+            value
+          }
+          amountDue {
+            value
+          }
+        }
+      }
+    }
+  }
+}
+
+query GetInvoice($businessId: ID!, $invoiceId: ID!) {
+  business(id: $businessId) {
+    invoice(id: $invoiceId) {
+      id
+      invoiceNumber
+      status
+      invoiceDate
+      dueDate
+      memo
+      customer {
+        id
+        name
+        email
+      }
+      currency {
+        code
+      }
+      items {
+        product {
+          id
+          name
+        }
+        description
+        quantity
+        unitPrice
+        taxes {
+          salesTax {
+            id
+            name
+            rate
+          }
+          amount {
+            value
+          }
+        }
+        subtotal {
+          value
+        }
+        total {
+          value
+        }
+      }
+      subtotal {
+        value
+      }
+      taxTotal {
+        value
+      }
+      total {
+        value
+      }
+      amountDue {
+        value
+      }
+      amountPaid {
+        value
+      }
+      pdfUrl
+    }
+  }
+}
