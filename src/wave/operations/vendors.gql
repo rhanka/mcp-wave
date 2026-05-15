@@ -1,0 +1,21 @@
+query ListVendors($businessId: ID!, $pageSize: Int = 50, $page: Int = 1) {
+  business(id: $businessId) {
+    vendors(pageSize: $pageSize, page: $page) {
+      pageInfo {
+        currentPage
+        totalPages
+        totalCount
+      }
+      edges {
+        node {
+          id
+          name
+          email
+          currency {
+            code
+          }
+        }
+      }
+    }
+  }
+}

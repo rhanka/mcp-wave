@@ -85,4 +85,22 @@ export class WaveClient {
   getCustomer(req: RequestContext, vars: SdkArgs<"GetCustomer">) {
     return this.call(req, "GetCustomer", vars);
   }
+  listInvoices(req: RequestContext, vars: SdkArgs<"ListInvoices">) {
+    return this.call(req, "ListInvoices", vars);
+  }
+  getInvoice(req: RequestContext, vars: SdkArgs<"GetInvoice">) {
+    return this.call(req, "GetInvoice", vars);
+  }
+  listProducts(req: RequestContext, vars: SdkArgs<"ListProducts">) {
+    return this.call(req, "ListProducts", vars);
+  }
+  listVendors(req: RequestContext, vars: SdkArgs<"ListVendors">) {
+    return this.call(req, "ListVendors", vars);
+  }
+  listAccounts(req: RequestContext, vars: SdkArgs<"ListAccounts">) {
+    return this.call(req, "ListAccounts", vars);
+  }
+  getAccount(req: RequestContext, vars: SdkArgs<"GetAccount">) {
+    return this.call(req, "GetAccount", vars);
+  }
 }

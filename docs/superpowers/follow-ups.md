@@ -97,6 +97,17 @@ The `moneyTransactionCreate` mutation says **"Requires `isClassicAccounting` to 
 - `/applications/` and `/api-tokens/` on `my.waveapps.com` return 404 (paths moved or never existed). The token UI lives under the developer-portal authenticated view at `Manage Applications`.
 - Wave's account currency-conversion and multi-business handling are fully exposed in the schema (`businesses` query with `isArchived` filter, `business(id)` with nested fields).
 
+### Impact F — Wave public schema exposes no transaction *reads* and no financial reports
+
+Confirmed during Phase A.5 via exhaustive grep on `data/wave-schema.graphql`:
+
+- **Transactions reads do not exist.** `type Business` has no `moneyTransactions` connection and no `moneyTransaction(id:)` field; `type Query` has no transaction surface; `type Transaction` is a stub `{ id: ID! }`. Money-transaction *mutations* (create/delete) exist but no way to list/get. Plan tasks A35 (`list_transactions`) and A36 (`get_transaction`) are NOT shippable against the current public schema.
+- **Financial reports do not exist.** No `profitAndLoss`/`balanceSheet`/`Report`/`AccountingBasis` types anywhere in the schema. Plan task A40 (`profit_and_loss` / `balance_sheet`) is NOT shippable.
+
+**Action taken:** A35, A36, A40 dropped from Phase A.5 implementation. A.5 ships 12 read tools instead of the planned 14-15.
+
+**Action for follow-up:** if Wave later exposes reads or reports, revisit. Option for a future workaround: a `current_account_balances` snapshot tool reading `business.accounts` with their current `balance` — a *very* limited stand-in for a balance sheet. Not implementing now; needs user sign-off first.
+
 ### Impact E — Retry-After header is not honored by `withRetry`
 
 Spec §12 calls for honoring `Retry-After` on 429 responses, but A.3 ships a fixed exponential backoff (`factor: 2, minTimeout: 500, maxTimeout: 5000`) in `src/lib/retry.ts`. Wave 429s carry the value via `ClientError.response.headers`, and the mapped `WaveApiError` keeps the raw error object in `waveDetails`, so the data is reachable — what's missing is wiring it into a `p-retry` `onFailedAttempt` hook or a custom delay computation.

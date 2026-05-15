@@ -1,0 +1,23 @@
+query ListProducts($businessId: ID!, $page: Int = 1, $pageSize: Int = 50) {
+  business(id: $businessId) {
+    products(page: $page, pageSize: $pageSize) {
+      pageInfo {
+        currentPage
+        totalPages
+        totalCount
+      }
+      edges {
+        node {
+          id
+          name
+          description
+          unitPrice
+          incomeAccount {
+            id
+            name
+          }
+        }
+      }
+    }
+  }
+}
