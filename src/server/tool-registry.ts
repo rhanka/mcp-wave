@@ -1,6 +1,7 @@
+import { listBusinessesTool } from "../tools/businesses/list-businesses.js";
 import type { RegisteredTool } from "./define-tool.js";
 
-const TOOLS: RegisteredTool[] = [];
+const TOOLS: RegisteredTool[] = [listBusinessesTool];
 
 export function allTools(): readonly RegisteredTool[] {
   return TOOLS;
