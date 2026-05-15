@@ -19,6 +19,9 @@ describe("isRetryable", () => {
     e.code = "ECONNRESET";
     expect(isRetryable(e)).toBe(true);
   });
+  it("returns true for fetch TypeError (network failure)", () => {
+    expect(isRetryable(new TypeError("Failed to fetch"))).toBe(true);
+  });
   it("returns false for unknown errors", () => {
     expect(isRetryable(new Error("oops"))).toBe(false);
   });
