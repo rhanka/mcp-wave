@@ -85,4 +85,68 @@ describe("WaveClient", () => {
     });
     expect(attempts).toBe(1);
   });
+
+  it("retries on a transient network failure", async () => {
+    let attempts = 0;
+    server.use(
+      graphql.query("ListBusinesses", () => {
+        attempts++;
+        if (attempts < 2) return HttpResponse.error();
+        return HttpResponse.json({
+          data: {
+            businesses: {
+              pageInfo: { currentPage: 1, totalPages: 1, totalCount: 0 },
+              edges: [],
+            },
+          },
+        });
+      }),
+    );
+    const client = new WaveClient({
+      endpoint: ENDPOINT,
+      provider: new MockProvider("x"),
+      retry: { retries: 3, minTimeout: 1, maxTimeout: 5 },
+    });
+    await client.listBusinesses(REQ, { pageSize: 1, page: 1 });
+    expect(attempts).toBe(2);
+  });
+
+  it("maps 429 with empty errors array using the HTTP status", async () => {
+    server.use(
+      graphql.query("ListBusinesses", () => HttpResponse.json({ errors: [] }, { status: 429 })),
+    );
+    const client = new WaveClient({
+      endpoint: ENDPOINT,
+      provider: new MockProvider("x"),
+      retry: { retries: 0 },
+    });
+    await expect(client.listBusinesses(REQ, { pageSize: 1, page: 1 })).rejects.toMatchObject({
+      code: "WAVE_RATE_LIMITED",
+    });
+  });
+
+  it("aborts the request when it exceeds timeoutMs", async () => {
+    server.use(
+      graphql.query("ListBusinesses", async () => {
+        await new Promise((r) => setTimeout(r, 200));
+        return HttpResponse.json({
+          data: {
+            businesses: {
+              pageInfo: { currentPage: 1, totalPages: 1, totalCount: 0 },
+              edges: [],
+            },
+          },
+        });
+      }),
+    );
+    const client = new WaveClient({
+      endpoint: ENDPOINT,
+      provider: new MockProvider("x"),
+      timeoutMs: 20,
+      retry: { retries: 0 },
+    });
+    await expect(client.listBusinesses(REQ, { pageSize: 1, page: 1 })).rejects.toMatchObject({
+      code: "WAVE_TIMEOUT",
+    });
+  });
 });

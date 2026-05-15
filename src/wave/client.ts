@@ -47,15 +47,28 @@ export class WaveClient {
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), this.timeoutMs);
       try {
-        const fn = sdk[method] as unknown as (v: SdkArgs<K>) => Promise<SdkResult<K>>;
-        return await fn(vars);
+        const fn = sdk[method] as unknown as (
+          v: SdkArgs<K>,
+          h?: undefined,
+          s?: AbortSignal,
+        ) => Promise<SdkResult<K>>;
+        return await fn(vars, undefined, ctrl.signal);
       } catch (e) {
+        if (ctrl.signal.aborted) {
+          throw new ToolError(
+            "WAVE_TIMEOUT",
+            { timeoutMs: this.timeoutMs },
+            "Increase timeoutMs or check Wave API latency.",
+          );
+        }
         if (e instanceof ClientError) {
           const first = e.response.errors?.[0];
-          throw mapWaveGraphQLError(first);
+          const status = (e.response as { status?: number }).status;
+          throw mapWaveGraphQLError(first, status);
         }
         if (e instanceof ToolError) throw e;
-        throw new ToolError("WAVE_CLIENT_ERROR", { message: String(e) });
+        if (e instanceof Error) throw e;
+        throw new ToolError("WAVE_CLIENT_ERROR", { value: String(e) });
       } finally {
         clearTimeout(timer);
       }
