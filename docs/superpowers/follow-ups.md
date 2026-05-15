@@ -97,6 +97,12 @@ The `moneyTransactionCreate` mutation says **"Requires `isClassicAccounting` to 
 - `/applications/` and `/api-tokens/` on `my.waveapps.com` return 404 (paths moved or never existed). The token UI lives under the developer-portal authenticated view at `Manage Applications`.
 - Wave's account currency-conversion and multi-business handling are fully exposed in the schema (`businesses` query with `isArchived` filter, `business(id)` with nested fields).
 
+### Impact E — Retry-After header is not honored by `withRetry`
+
+Spec §12 calls for honoring `Retry-After` on 429 responses, but A.3 ships a fixed exponential backoff (`factor: 2, minTimeout: 500, maxTimeout: 5000`) in `src/lib/retry.ts`. Wave 429s carry the value via `ClientError.response.headers`, and the mapped `WaveApiError` keeps the raw error object in `waveDetails`, so the data is reachable — what's missing is wiring it into a `p-retry` `onFailedAttempt` hook or a custom delay computation.
+
+**Action:** revisit at the start of Phase B (write tools) when 429s become more likely under sustained writes. Until then, the fixed backoff is acceptable for read-only traffic and is plenty conservative.
+
 ## 5. Concrete action items before resuming the plan
 
 - [ ] **User**: log into Wave, navigate to Manage Applications, create an App, generate Full Access Token, store in `.env` as `WAVE_API_TOKEN`.
