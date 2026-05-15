@@ -1,0 +1,41 @@
+query ListAccounts($businessId: ID!, $types: [AccountTypeValue!]) {
+  business(id: $businessId) {
+    accounts(types: $types) {
+      edges {
+        node {
+          id
+          name
+          type {
+            value
+            normalBalanceType
+          }
+          subtype {
+            value
+          }
+          currency {
+            code
+          }
+        }
+      }
+    }
+  }
+}
+
+query GetAccount($businessId: ID!, $accountId: ID!) {
+  business(id: $businessId) {
+    account(id: $accountId) {
+      id
+      name
+      type {
+        value
+        normalBalanceType
+      }
+      subtype {
+        value
+      }
+      currency {
+        code
+      }
+    }
+  }
+}
