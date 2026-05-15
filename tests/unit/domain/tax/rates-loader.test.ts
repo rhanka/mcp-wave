@@ -85,4 +85,12 @@ describe("TaxRatesLoader", () => {
       code: "TAX_RATES_INVALID",
     });
   });
+
+  it("loadForDate throws TAX_RATES_NOT_FOUND when no table covers the date", async () => {
+    const loader = new TaxRatesLoader(fixtureDir(VALID));
+    await expect(loader.loadForDate("CA-QC", "2027-01-01")).rejects.toMatchObject({
+      code: "TAX_RATES_NOT_FOUND",
+      details: { jurisdiction: "CA-QC", date: "2027-01-01" },
+    });
+  });
 });
