@@ -7,7 +7,7 @@ import {
 import { zodToJsonSchema } from "zod-to-json-schema";
 import { ToolError } from "../lib/errors.js";
 import type { RegisteredTool } from "./define-tool.js";
-import { toMcpResult } from "./error-bridge.js";
+import { envelopeFromError, toMcpResult } from "./error-bridge.js";
 import type { ToolContext } from "./tool-context.js";
 
 export interface BuildOptions {
@@ -21,25 +21,31 @@ export function buildMcpServer(opts: BuildOptions): { server: Server } {
     { capabilities: { tools: {} } },
   );
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: opts.tools.map((t) => ({
-      name: t.name,
-      description: t.description,
-      inputSchema: zodToJsonSchema(t.inputSchema, { target: "openApi3" }) as Record<
-        string,
-        unknown
-      >,
-    })),
+  const announcedTools = opts.tools.map((t) => ({
+    name: t.name,
+    description: t.description,
+    inputSchema: zodToJsonSchema(t.inputSchema, { target: "openApi3" }) as Record<string, unknown>,
   }));
 
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: announcedTools }));
+
   server.setRequestHandler(CallToolRequestSchema, async (req): Promise<CallToolResult> => {
+    const ctx = opts.makeCtx();
     const tool = opts.tools.find((t) => t.name === req.params.name);
     if (!tool) {
-      throw new ToolError("UNKNOWN_TOOL", { name: req.params.name });
+      const err = new ToolError(
+        "UNKNOWN_TOOL",
+        { name: req.params.name },
+        `Unknown tool. Known: ${opts.tools.map((t) => t.name).join(", ")}.`,
+      );
+      ctx.logger.warn(
+        { request_id: ctx.req.request_id, tool: req.params.name, code: err.code },
+        "unknown tool",
+      );
+      return envelopeFromError(err) satisfies CallToolResult;
     }
-    const ctx = opts.makeCtx();
     const result = await toMcpResult(tool)(req.params.arguments ?? {}, ctx);
-    return result as CallToolResult;
+    return result satisfies CallToolResult;
   });
 
   return { server };
