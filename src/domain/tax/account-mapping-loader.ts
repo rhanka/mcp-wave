@@ -25,11 +25,25 @@ export class AccountMappingLoader {
         "Run setup_account_mapping or create data/account-mapping/default.yaml.",
       );
     }
-    const parsed = AccountMappingSchema.safeParse(parseYaml(raw));
+    let yaml: unknown;
+    try {
+      yaml = parseYaml(raw);
+    } catch (error) {
+      throw new ToolError(
+        "ACCOUNT_MAPPING_INVALID",
+        {
+          path,
+          reason: "YAML_PARSE_ERROR",
+          message: error instanceof Error ? error.message : String(error),
+        },
+        "Fix the YAML syntax in the account mapping file.",
+      );
+    }
+    const parsed = AccountMappingSchema.safeParse(yaml);
     if (!parsed.success) {
       throw new ToolError(
         "ACCOUNT_MAPPING_INVALID",
-        { issues: parsed.error.issues },
+        { path, reason: "SCHEMA_VALIDATION_FAILED", issues: parsed.error.issues },
         "Fix the YAML to match AccountMappingSchema.",
       );
     }
