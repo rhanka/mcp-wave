@@ -16,6 +16,7 @@ export function isRetryable(e: unknown): boolean {
     if (e.httpStatus >= 500) return true;
     return false;
   }
+  if (e instanceof TypeError) return true;
   if (e instanceof Error) {
     const code = (e as Error & { code?: string }).code;
     if (code && NETWORK_CODES.has(code)) return true;
