@@ -20,3 +20,6 @@ generates:
         DateTime: string
         Decimal: string
         JSON: unknown
+    hooks:
+      afterOneFileWrite:
+        - "node scripts/fix-codegen-imports.mjs"
