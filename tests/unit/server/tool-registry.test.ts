@@ -1,9 +1,26 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { z } from "zod";
 import { defineTool } from "../../../src/server/define-tool.js";
-import { allTools, findTool, registerTools } from "../../../src/server/tool-registry.js";
+import {
+  __clearToolsForTests,
+  allTools,
+  findTool,
+  registerTools,
+} from "../../../src/server/tool-registry.js";
 
 describe("tool-registry", () => {
+  let snapshot: ReadonlyArray<unknown> = [];
+
+  beforeEach(() => {
+    snapshot = [...allTools()];
+    __clearToolsForTests();
+  });
+
+  afterEach(() => {
+    __clearToolsForTests();
+    registerTools(...(snapshot as Parameters<typeof registerTools>));
+  });
+
   it("registers and looks up tools by name", () => {
     const a = defineTool({
       name: "a_tool",
