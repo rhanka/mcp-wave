@@ -80,4 +80,42 @@ describe("toMcpResult", () => {
     const body = parseText(r) as { code: string };
     expect(body.code).toBe("INTERNAL_ERROR");
   });
+
+  it("does not leak stack traces or raw messages from generic Errors", async () => {
+    const tool = defineTool({
+      name: "blows",
+      description: "x",
+      inputSchema: z.object({}),
+      async execute() {
+        throw new Error("internal detail with /home/user/secret/path");
+      },
+    });
+    const r = await toMcpResult(tool)({}, ctx());
+    expect(r.isError).toBe(true);
+    const body = parseText(r) as Record<string, unknown>;
+    expect(body.code).toBe("INTERNAL_ERROR");
+    expect(JSON.stringify(body)).not.toContain("/home/user/secret/path");
+    expect(JSON.stringify(body)).not.toContain("stack");
+  });
+
+  it("logs the original error (with stack) at error level", async () => {
+    const errorLogger = vi.fn();
+    const c = {
+      req: { headers: null, request_id: "r" },
+      logger: { info: vi.fn(), warn: vi.fn(), error: errorLogger, debug: vi.fn() },
+    } as unknown as ToolContext;
+    const tool = defineTool({
+      name: "blows",
+      description: "x",
+      inputSchema: z.object({}),
+      async execute() {
+        throw new Error("private debug info");
+      },
+    });
+    await toMcpResult(tool)({}, c);
+    expect(errorLogger).toHaveBeenCalled();
+    const firstCallArg = errorLogger.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(firstCallArg).toMatchObject({ tool: "blows" });
+    expect(String(firstCallArg.message ?? "")).toContain("private debug info");
+  });
 });
