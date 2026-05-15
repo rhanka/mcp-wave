@@ -1,0 +1,12 @@
+# Copy to data/account-mapping/default.yaml and fill in your Wave account_id values.
+# Run setup_account_mapping (Phase B) to have the MCP suggest matches.
+business_id_env: WAVE_DEFAULT_BUSINESS_ID
+jurisdiction: CA-QC
+remittance_buckets:
+  CRA:
+    payable_account_id: "REPLACE_WITH_FEDERAL_PAYABLE_ACCOUNT_ID"
+  RQ:
+    payable_account_id: "REPLACE_WITH_QUEBEC_PAYABLE_ACCOUNT_ID"
+# tax_code_to_account:   # optional, used in v1.1 detailed mode
+#   CIT: REPLACE
+#   PIT: REPLACE
