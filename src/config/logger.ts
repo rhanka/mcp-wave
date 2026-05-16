@@ -34,11 +34,18 @@ export interface LoggerOptions {
 }
 
 export function createLogger(opts: LoggerOptions): Logger {
-  return pino({
-    level: opts.level,
-    formatters: {
-      log: (obj) => (opts.logPII ? obj : (redact(obj) as Record<string, unknown>)),
+  // Always log to stderr (fd 2) in sync mode. stdout is reserved for the
+  // MCP protocol when this server runs under stdio transport; sync avoids
+  // pino's worker-thread bootstrapping path which had compatibility issues
+  // under Node 24 + tsx.
+  return pino(
+    {
+      level: opts.level,
+      formatters: {
+        log: (obj) => (opts.logPII ? obj : (redact(obj) as Record<string, unknown>)),
+      },
+      timestamp: pino.stdTimeFunctions.isoTime,
     },
-    timestamp: pino.stdTimeFunctions.isoTime,
-  });
+    pino.destination({ fd: 2, sync: true }),
+  );
 }
