@@ -90,6 +90,15 @@ The `moneyTransactionCreate` mutation says **"Requires `isClassicAccounting` to 
 - At tool startup or first call, log a clear `CLASSIC_ACCOUNTING_NOT_SUPPORTED` error if the active business is on classic accounting.
 - Document in README + the plan's Task B25 (registry smoke test) that money-transaction tools are inactive on classic-accounting businesses.
 
+### Impact H — Phase B.1 tool drops (transaction categorize/split/match)
+
+Confirmed during B.1 against the introspected schema: Wave's public schema has no `moneyTransactionCategorize`, no `moneyTransactionSplit`, and no `moneyTransactionMatchToInvoice` mutations. Plan tasks **B9** (`categorize_transaction`), **B10** (`split_transaction`), and **B11** (`match_transaction_to_invoice`) are dropped.
+
+Consequences:
+- B5 `mark_invoice_paid` no longer needs B11 — implemented directly over `invoicePaymentCreateManual` (Impact A).
+- The workflow gap (post-import categorization, split, match) stands as a v1 limitation. Users do these in the Wave UI.
+- B.1 ships 6 write tools (B3–B8) + registry (B12) instead of 9.
+
 ### Impact G — `tsx@4.22.0` regression on Node 24
 
 `tsx@4.22.0` (the current "latest" as of 2026-05-16) transforms `package.json` files into ESM modules, which then break any CJS `require("./package.json")` call in dependencies. Reproduces with `pino@10` → `thread-stream@4` on `node@24.15.0`.
