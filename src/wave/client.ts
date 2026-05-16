@@ -3,7 +3,7 @@ import { ToolError } from "../lib/errors.js";
 import { withRetry } from "../lib/retry.js";
 import type { RequestContext, WaveCredentialProvider } from "./auth/provider.js";
 import { mapWaveGraphQLError } from "./errors.js";
-import { type Sdk, getSdk } from "./generated/sdk.js";
+import { getSdk, type Sdk } from "./generated/sdk.js";
 
 export interface WaveClientOptions {
   endpoint: string;

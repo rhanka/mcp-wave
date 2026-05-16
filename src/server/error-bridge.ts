@@ -1,5 +1,5 @@
 import { ZodError } from "zod";
-import { ToolError, normalizeError } from "../lib/errors.js";
+import { normalizeError, ToolError } from "../lib/errors.js";
 import type { RegisteredTool } from "./define-tool.js";
 import type { ToolContext } from "./tool-context.js";
 
