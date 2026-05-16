@@ -4,7 +4,7 @@ import {
   type CallToolResult,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { zodToJsonSchema } from "zod-to-json-schema";
+import { z } from "zod";
 import { ToolError } from "../lib/errors.js";
 import type { RegisteredTool } from "./define-tool.js";
 import { envelopeFromError, toMcpResult } from "./error-bridge.js";
@@ -24,7 +24,7 @@ export function buildMcpServer(opts: BuildOptions): { server: Server } {
   const announcedTools = opts.tools.map((t) => ({
     name: t.name,
     description: t.description,
-    inputSchema: zodToJsonSchema(t.inputSchema, { target: "openApi3" }) as Record<string, unknown>,
+    inputSchema: z.toJSONSchema(t.inputSchema, { target: "draft-7" }) as Record<string, unknown>,
   }));
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: announcedTools }));

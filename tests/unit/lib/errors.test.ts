@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ToolError, WaveApiError, normalizeError } from "../../../src/lib/errors.js";
+import { normalizeError, ToolError, WaveApiError } from "../../../src/lib/errors.js";
 
 describe("ToolError", () => {
   it("captures code, details, hint", () => {
