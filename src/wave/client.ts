@@ -103,4 +103,49 @@ export class WaveClient {
   getAccount(req: RequestContext, vars: SdkArgs<"GetAccount">) {
     return this.call(req, "GetAccount", vars);
   }
+  listSalesTaxes(req: RequestContext, vars: SdkArgs<"ListSalesTaxes">) {
+    return this.call(req, "ListSalesTaxes", vars);
+  }
+
+  // ----- Mutations -----
+
+  invoiceCreate(req: RequestContext, vars: SdkArgs<"InvoiceCreate">) {
+    return this.call(req, "InvoiceCreate", vars);
+  }
+  invoicePatch(req: RequestContext, vars: SdkArgs<"InvoicePatch">) {
+    return this.call(req, "InvoicePatch", vars);
+  }
+  invoiceSend(req: RequestContext, vars: SdkArgs<"InvoiceSend">) {
+    return this.call(req, "InvoiceSend", vars);
+  }
+  invoiceDelete(req: RequestContext, vars: SdkArgs<"InvoiceDelete">) {
+    return this.call(req, "InvoiceDelete", vars);
+  }
+  invoiceMarkSent(req: RequestContext, vars: SdkArgs<"InvoiceMarkSent">) {
+    return this.call(req, "InvoiceMarkSent", vars);
+  }
+  invoicePaymentCreateManual(req: RequestContext, vars: SdkArgs<"InvoicePaymentCreateManual">) {
+    return this.call(req, "InvoicePaymentCreateManual", vars);
+  }
+  customerCreate(req: RequestContext, vars: SdkArgs<"CustomerCreate">) {
+    return this.call(req, "CustomerCreate", vars);
+  }
+  customerPatch(req: RequestContext, vars: SdkArgs<"CustomerPatch">) {
+    return this.call(req, "CustomerPatch", vars);
+  }
+  customerDelete(req: RequestContext, vars: SdkArgs<"CustomerDelete">) {
+    return this.call(req, "CustomerDelete", vars);
+  }
+  productCreate(req: RequestContext, vars: SdkArgs<"ProductCreate">) {
+    return this.call(req, "ProductCreate", vars);
+  }
+  productPatch(req: RequestContext, vars: SdkArgs<"ProductPatch">) {
+    return this.call(req, "ProductPatch", vars);
+  }
+  productArchive(req: RequestContext, vars: SdkArgs<"ProductArchive">) {
+    return this.call(req, "ProductArchive", vars);
+  }
+  moneyTransactionCreate(req: RequestContext, vars: SdkArgs<"MoneyTransactionCreate">) {
+    return this.call(req, "MoneyTransactionCreate", vars);
+  }
 }
