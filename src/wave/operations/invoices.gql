@@ -110,3 +110,110 @@ query GetInvoice($businessId: ID!, $invoiceId: ID!) {
     }
   }
 }
+
+mutation InvoiceCreate($input: InvoiceCreateInput!) {
+  invoiceCreate(input: $input) {
+    didSucceed
+    inputErrors {
+      code
+      message
+      path
+    }
+    invoice {
+      id
+      invoiceNumber
+      status
+      pdfUrl
+      total {
+        value
+      }
+      subtotal {
+        value
+      }
+      taxTotal {
+        value
+      }
+    }
+  }
+}
+
+mutation InvoicePatch($input: InvoicePatchInput!) {
+  invoicePatch(input: $input) {
+    didSucceed
+    inputErrors {
+      code
+      message
+      path
+    }
+    invoice {
+      id
+      status
+    }
+  }
+}
+
+mutation InvoiceSend($input: InvoiceSendInput!) {
+  invoiceSend(input: $input) {
+    didSucceed
+    inputErrors {
+      code
+      message
+      path
+    }
+  }
+}
+
+mutation InvoiceDelete($input: InvoiceDeleteInput!) {
+  invoiceDelete(input: $input) {
+    didSucceed
+    inputErrors {
+      code
+      message
+      path
+    }
+  }
+}
+
+mutation InvoiceMarkSent($input: InvoiceMarkSentInput!) {
+  invoiceMarkSent(input: $input) {
+    didSucceed
+    inputErrors {
+      code
+      message
+      path
+    }
+  }
+}
+
+mutation InvoicePaymentCreateManual($input: InvoicePaymentCreateManualInput!) {
+  invoicePaymentCreateManual(input: $input) {
+    didSucceed
+    inputErrors {
+      code
+      message
+      path
+    }
+    invoicePayment {
+      id
+      amount
+      paymentDate
+      paymentMethod
+      memo
+    }
+  }
+}
+
+query ListSalesTaxes($businessId: ID!) {
+  business(id: $businessId) {
+    salesTaxes {
+      edges {
+        node {
+          id
+          name
+          abbreviation
+          rate
+        }
+      }
+    }
+  }
+}

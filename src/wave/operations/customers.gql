@@ -34,3 +34,54 @@ query GetCustomer($businessId: ID!, $customerId: ID!) {
     }
   }
 }
+
+mutation CustomerCreate($input: CustomerCreateInput!) {
+  customerCreate(input: $input) {
+    didSucceed
+    inputErrors {
+      code
+      message
+      path
+    }
+    customer {
+      id
+      name
+      email
+      internalNotes
+      currency {
+        code
+      }
+    }
+  }
+}
+
+mutation CustomerPatch($input: CustomerPatchInput!) {
+  customerPatch(input: $input) {
+    didSucceed
+    inputErrors {
+      code
+      message
+      path
+    }
+    customer {
+      id
+      name
+      email
+      internalNotes
+      currency {
+        code
+      }
+    }
+  }
+}
+
+mutation CustomerDelete($input: CustomerDeleteInput!) {
+  customerDelete(input: $input) {
+    didSucceed
+    inputErrors {
+      code
+      message
+      path
+    }
+  }
+}

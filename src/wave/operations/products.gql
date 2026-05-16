@@ -21,3 +21,56 @@ query ListProducts($businessId: ID!, $page: Int = 1, $pageSize: Int = 50) {
     }
   }
 }
+
+mutation ProductCreate($input: ProductCreateInput!) {
+  productCreate(input: $input) {
+    didSucceed
+    inputErrors {
+      code
+      message
+      path
+    }
+    product {
+      id
+      name
+      description
+      unitPrice
+      incomeAccount {
+        id
+        name
+      }
+    }
+  }
+}
+
+mutation ProductPatch($input: ProductPatchInput!) {
+  productPatch(input: $input) {
+    didSucceed
+    inputErrors {
+      code
+      message
+      path
+    }
+    product {
+      id
+      name
+      description
+      unitPrice
+    }
+  }
+}
+
+mutation ProductArchive($input: ProductArchiveInput!) {
+  productArchive(input: $input) {
+    didSucceed
+    inputErrors {
+      code
+      message
+      path
+    }
+    product {
+      id
+      isArchived
+    }
+  }
+}
