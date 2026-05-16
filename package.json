@@ -43,12 +43,12 @@
     "@graphql-codegen/typescript-operations": "^4.4.0",
     "@hono/node-server": "^1.13.0",
     "@types/node": "^22.9.0",
-    "@vitest/coverage-v8": "^2.1.0",
+    "@vitest/coverage-v8": "^4.1.6",
     "execa": "^9.5.0",
     "fast-check": "^3.23.0",
     "msw": "^2.6.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
-    "vitest": "^2.1.0"
+    "vitest": "^4.1.6"
   }
 }
