@@ -90,6 +90,14 @@ The `moneyTransactionCreate` mutation says **"Requires `isClassicAccounting` to 
 - At tool startup or first call, log a clear `CLASSIC_ACCOUNTING_NOT_SUPPORTED` error if the active business is on classic accounting.
 - Document in README + the plan's Task B25 (registry smoke test) that money-transaction tools are inactive on classic-accounting businesses.
 
+### Impact G — `tsx@4.22.0` regression on Node 24
+
+`tsx@4.22.0` (the current "latest" as of 2026-05-16) transforms `package.json` files into ESM modules, which then break any CJS `require("./package.json")` call in dependencies. Reproduces with `pino@10` → `thread-stream@4` on `node@24.15.0`.
+
+Bisect: `4.20.6` and `4.21.0` are fine; `4.22.0` is broken. We pin `tsx@4.21.0` until a fix lands upstream.
+
+**Action for follow-up:** track tsx releases and bump back to latest when the regression is resolved. The pin location is `package.json` (`devDependencies.tsx`).
+
 ## 4. Other observations
 
 - The doc portal is a Zendesk hosting (`developer.waveapps.com/hc/en-us/...`). Anchors include `https://my.waveapps.com/login/` flows.
