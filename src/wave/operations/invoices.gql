@@ -106,7 +106,66 @@ query GetInvoice($businessId: ID!, $invoiceId: ID!) {
       amountPaid {
         value
       }
+      payments {
+        id
+        amount
+        paymentDate
+        paymentMethod
+        memo
+        accountingTransactionId
+        transactionId
+        state
+        readonlyUrl
+        createdAt
+        modifiedAt
+        account {
+          id
+          name
+        }
+      }
       pdfUrl
+    }
+  }
+}
+
+query GetInvoicePayment($businessId: ID!, $invoicePaymentId: ID!) {
+  business(id: $businessId) {
+    invoicePayment(id: $invoicePaymentId) {
+      id
+      amount
+      paymentDate
+      paymentMethod
+      memo
+      exchangeRate
+      accountingTransactionId
+      transactionId
+      state
+      readonlyUrl
+      createdAt
+      modifiedAt
+      accountNumberLast3
+      account {
+        id
+        name
+      }
+      customer {
+        id
+        name
+        email
+      }
+      businessCurrency {
+        code
+      }
+      invoiceCurrency {
+        code
+      }
+      paymentCurrency {
+        code
+      }
+      invoice {
+        id
+        invoiceNumber
+      }
     }
   }
 }
@@ -199,6 +258,46 @@ mutation InvoicePaymentCreateManual($input: InvoicePaymentCreateManualInput!) {
       paymentDate
       paymentMethod
       memo
+    }
+  }
+}
+
+mutation InvoicePaymentPatch($input: InvoicePaymentPatchInput!) {
+  invoicePaymentPatch(input: $input) {
+    didSucceed
+    inputErrors {
+      code
+      message
+      path
+    }
+    invoicePayment {
+      id
+      amount
+      paymentDate
+      paymentMethod
+      memo
+    }
+  }
+}
+
+mutation InvoicePaymentDelete($input: InvoicePaymentDeleteInput!) {
+  invoicePaymentDelete(input: $input) {
+    didSucceed
+    inputErrors {
+      code
+      message
+      path
+    }
+  }
+}
+
+mutation InvoicePaymentReceiptSend($input: InvoicePaymentReceiptSendInput!) {
+  invoicePaymentReceiptSend(input: $input) {
+    didSucceed
+    inputErrors {
+      code
+      message
+      path
     }
   }
 }

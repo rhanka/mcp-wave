@@ -5,7 +5,7 @@ import { defineTool } from "../../server/define-tool.js";
 export const getInvoiceTool = defineTool({
   name: "get_invoice",
   description:
-    "Fetch a single invoice by id, including line items, taxes, totals, amount due/paid, customer, currency, and PDF URL.",
+    "Fetch a single invoice by id, including line items, taxes, totals, amount due/paid, linked invoice payments, customer, currency, and PDF URL.",
   inputSchema: z.object({
     business_id: z.string().min(1).optional(),
     invoice_id: z.string().min(1),
@@ -59,6 +59,25 @@ export const getInvoiceTool = defineTool({
       subtotal: it.subtotal.value,
       total: it.total.value,
     }));
+    const payments = (invoice.payments ?? [])
+      .filter((payment): payment is NonNullable<typeof payment> => payment != null)
+      .map((payment) => ({
+        id: payment.id,
+        amount: payment.amount,
+        payment_date: payment.paymentDate,
+        payment_method: payment.paymentMethod,
+        memo: payment.memo,
+        accounting_transaction_id: payment.accountingTransactionId,
+        transaction_id: payment.transactionId,
+        state: payment.state,
+        receipt_url: payment.readonlyUrl,
+        created_at: payment.createdAt,
+        modified_at: payment.modifiedAt,
+        account: {
+          id: payment.account.id,
+          name: payment.account.name,
+        },
+      }));
 
     return {
       id: invoice.id,
@@ -79,6 +98,7 @@ export const getInvoiceTool = defineTool({
       total: invoice.total.value,
       amount_due: invoice.amountDue.value,
       amount_paid: invoice.amountPaid.value,
+      payments,
       pdf_url: invoice.pdfUrl,
     };
   },

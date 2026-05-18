@@ -24,7 +24,7 @@ forward its own Wave bearer token over HTTP.
 
 ## Tool catalog
 
-Current MCP surface: 21 tools.
+Current MCP surface: 25 tools.
 
 Read tools:
 - `list_businesses`
@@ -32,6 +32,7 @@ Read tools:
 - `get_customer`
 - `list_invoices`
 - `get_invoice`
+- `get_invoice_payment`
 - `download_invoice_pdf`
 - `list_products`
 - `list_vendors`
@@ -44,6 +45,9 @@ Write tools:
 - `create_invoice`
 - `send_invoice`
 - `mark_invoice_paid`
+- `update_invoice_payment`
+- `delete_invoice_payment`
+- `send_invoice_payment_receipt`
 - `delete_invoice`
 - `create_customer`
 - `upsert_product`
@@ -55,7 +59,9 @@ Workflow tools:
 
 This catalog reflects the current public Wave schema. Transaction read tools and
 financial report tools are not exposed because the public API does not provide
-those surfaces today.
+those surfaces today. Imported bank-transaction reconciliation is also still a
+Wave-UI-only gap: this MCP can manage invoice payment records, but it cannot
+list/match/split imported bank transactions through the public API.
 
 ## Stdio client config
 
