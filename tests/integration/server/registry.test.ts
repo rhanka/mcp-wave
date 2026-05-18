@@ -12,6 +12,7 @@ describe("tool registry v1 catalog", () => {
         "create_customer",
         "create_invoice",
         "create_invoice_for_client",
+        "audit_account_mapping",
         "delete_invoice",
         "delete_invoice_payment",
         "download_invoice_pdf",

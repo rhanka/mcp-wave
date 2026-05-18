@@ -24,7 +24,7 @@ forward its own Wave bearer token over HTTP.
 
 ## Tool catalog
 
-Current MCP surface: 25 tools.
+Current MCP surface: 26 tools.
 
 Read tools:
 - `list_businesses`
@@ -54,6 +54,7 @@ Write tools:
 
 Workflow tools:
 - `create_invoice_for_client`
+- `audit_account_mapping`
 - `setup_account_mapping`
 - `split_payroll_remittance`
 
@@ -62,6 +63,11 @@ financial report tools are not exposed because the public API does not provide
 those surfaces today. Imported bank-transaction reconciliation is also still a
 Wave-UI-only gap: this MCP can manage invoice payment records, but it cannot
 list/match/split imported bank transactions through the public API.
+
+`audit_account_mapping` is the recommended preflight before payroll remittance
+work: it shows which remittance buckets are mapped, which are broken or
+unmapped, and which cash/bank accounts are available to use as `bank_account_id`
+when posting the remittance split.
 
 ## Stdio client config
 
