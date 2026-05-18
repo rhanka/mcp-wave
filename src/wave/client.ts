@@ -97,6 +97,9 @@ export class WaveClient {
   getInvoice(req: RequestContext, vars: SdkArgs<"GetInvoice">) {
     return this.call(req, "GetInvoice", vars);
   }
+  getInvoicePayment(req: RequestContext, vars: SdkArgs<"GetInvoicePayment">) {
+    return this.call(req, "GetInvoicePayment", vars);
+  }
   listProducts(req: RequestContext, vars: SdkArgs<"ListProducts">) {
     return this.call(req, "ListProducts", vars);
   }
@@ -132,6 +135,15 @@ export class WaveClient {
   }
   invoicePaymentCreateManual(req: RequestContext, vars: SdkArgs<"InvoicePaymentCreateManual">) {
     return this.call(req, "InvoicePaymentCreateManual", vars);
+  }
+  invoicePaymentPatch(req: RequestContext, vars: SdkArgs<"InvoicePaymentPatch">) {
+    return this.call(req, "InvoicePaymentPatch", vars);
+  }
+  invoicePaymentDelete(req: RequestContext, vars: SdkArgs<"InvoicePaymentDelete">) {
+    return this.call(req, "InvoicePaymentDelete", vars);
+  }
+  invoicePaymentReceiptSend(req: RequestContext, vars: SdkArgs<"InvoicePaymentReceiptSend">) {
+    return this.call(req, "InvoicePaymentReceiptSend", vars);
   }
   customerCreate(req: RequestContext, vars: SdkArgs<"CustomerCreate">) {
     return this.call(req, "CustomerCreate", vars);
