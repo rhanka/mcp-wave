@@ -38,11 +38,18 @@ remittance_buckets:
   RQ: { payable_account_id: "acct_qc" }
 `;
 
-function makeCtx(): ToolContext {
+const MAPPING_WITHOUT_RQ = `
+business_id_env: WAVE_DEFAULT_BUSINESS_ID
+jurisdiction: CA-QC
+remittance_buckets:
+  CRA: { payable_account_id: "acct_fed" }
+`;
+
+function makeCtx(mappingYaml = MAPPING): ToolContext {
   const ratesDir = mkdtempSync(join(tmpdir(), "mcp-wave-rates-"));
   writeFileSync(join(ratesDir, "ca-qc-2026.yaml"), RATES);
   const mappingDir = mkdtempSync(join(tmpdir(), "mcp-wave-mapping-"));
-  writeFileSync(join(mappingDir, "default.yaml"), MAPPING);
+  writeFileSync(join(mappingDir, "default.yaml"), mappingYaml);
 
   return {
     req: { headers: null, request_id: "test" },
@@ -87,9 +94,10 @@ describe("split_payroll_remittance", () => {
         jurisdiction: "CA-QC",
         period_year: 2026,
         total_amount: 4820,
-        buckets: { CRA: { amount: 3200 }, RQ: { amount: 1620 } },
+        buckets: { CRA: { amount: 3200, memo: "Federal source deductions" }, RQ: { amount: 1620 } },
         memo_prefix: "Nov 2026 DAS",
         external_id: "payroll-provider-2026-11-15",
+        notes: "Created by mcp-wave",
       },
       makeCtx(),
     )) as {
@@ -117,6 +125,7 @@ describe("split_payroll_remittance", () => {
       date: "2026-11-15",
       description: "November 2026 payroll remittance",
       externalId: "payroll-provider-2026-11-15",
+      notes: "Created by mcp-wave",
       anchor: {
         accountId: "acct_bank",
         amount: "4820",
@@ -127,7 +136,7 @@ describe("split_payroll_remittance", () => {
           accountId: "acct_fed",
           amount: "3200",
           balance: "INCREASE",
-          description: "Nov 2026 DAS — Receiver General",
+          description: "Federal source deductions",
         },
         {
           accountId: "acct_qc",
@@ -191,5 +200,124 @@ describe("split_payroll_remittance", () => {
     ).rejects.toMatchObject({
       code: "CLASSIC_ACCOUNTING_NOT_SUPPORTED",
     });
+  });
+
+  it("rejects missing businesses before loading tax and mapping files", async () => {
+    server.use(
+      graphql.query("GetBusinessAccountingSettings", () =>
+        HttpResponse.json({
+          data: { business: null },
+        }),
+      ),
+    );
+
+    await expect(
+      splitPayrollRemittanceTool.handler(
+        {
+          date: "2026-11-15",
+          bank_account_id: "acct_bank",
+          description: "November 2026 payroll remittance",
+          jurisdiction: "CA-QC",
+          period_year: 2026,
+          total_amount: 4820,
+          buckets: { CRA: { amount: 3200 }, RQ: { amount: 1620 } },
+        },
+        makeCtx(),
+      ),
+    ).rejects.toMatchObject({
+      code: "BUSINESS_NOT_FOUND",
+    });
+  });
+
+  it("rejects unknown remittance authority codes", async () => {
+    server.use(
+      graphql.query("GetBusinessAccountingSettings", () =>
+        HttpResponse.json({
+          data: { business: { id: "biz_x", isClassicAccounting: false } },
+        }),
+      ),
+    );
+
+    await expect(
+      splitPayrollRemittanceTool.handler(
+        {
+          date: "2026-11-15",
+          bank_account_id: "acct_bank",
+          description: "November 2026 payroll remittance",
+          jurisdiction: "CA-QC",
+          period_year: 2026,
+          total_amount: 4820,
+          buckets: { CRA: { amount: 3200 }, BAD: { amount: 1620 } },
+        },
+        makeCtx(),
+      ),
+    ).rejects.toMatchObject({
+      code: "UNKNOWN_AUTHORITY_CODE",
+      details: { code: "BAD", expected: ["CRA", "RQ"] },
+    });
+  });
+
+  it("rejects remittance buckets missing an account mapping", async () => {
+    server.use(
+      graphql.query("GetBusinessAccountingSettings", () =>
+        HttpResponse.json({
+          data: { business: { id: "biz_x", isClassicAccounting: false } },
+        }),
+      ),
+    );
+
+    await expect(
+      splitPayrollRemittanceTool.handler(
+        {
+          date: "2026-11-15",
+          bank_account_id: "acct_bank",
+          description: "November 2026 payroll remittance",
+          jurisdiction: "CA-QC",
+          period_year: 2026,
+          total_amount: 4820,
+          buckets: { CRA: { amount: 3200 }, RQ: { amount: 1620 } },
+        },
+        makeCtx(MAPPING_WITHOUT_RQ),
+      ),
+    ).rejects.toMatchObject({
+      code: "MISSING_ACCOUNT_MAPPING",
+      details: { authority: "RQ" },
+    });
+  });
+
+  it("throws WAVE_NO_TRANSACTION when Wave succeeds without returning a transaction", async () => {
+    server.use(
+      graphql.query("GetBusinessAccountingSettings", () =>
+        HttpResponse.json({
+          data: { business: { id: "biz_x", isClassicAccounting: false } },
+        }),
+      ),
+      graphql.mutation("MoneyTransactionCreate", () =>
+        HttpResponse.json({
+          data: {
+            moneyTransactionCreate: {
+              didSucceed: true,
+              inputErrors: [],
+              transaction: null,
+            },
+          },
+        }),
+      ),
+    );
+
+    await expect(
+      splitPayrollRemittanceTool.handler(
+        {
+          date: "2026-11-15",
+          bank_account_id: "acct_bank",
+          description: "November 2026 payroll remittance",
+          jurisdiction: "CA-QC",
+          period_year: 2026,
+          total_amount: 4820,
+          buckets: { CRA: { amount: 3200 }, RQ: { amount: 1620 } },
+        },
+        makeCtx(),
+      ),
+    ).rejects.toMatchObject({ code: "WAVE_NO_TRANSACTION" });
   });
 });

@@ -262,4 +262,294 @@ send_to: [billing@acme.com]`),
       details: { unresolved: ["VAT"], available: ["GST"] },
     });
   });
+
+  it("sends immediately and forwards optional invoice fields", async () => {
+    let invoiceCreateInput: Record<string, unknown> | null = null;
+    let invoiceSendInput: Record<string, unknown> | null = null;
+
+    server.use(
+      graphql.query("ListCustomers", () =>
+        HttpResponse.json({
+          data: {
+            business: {
+              customers: {
+                pageInfo: { currentPage: 1, totalPages: 1, totalCount: 1 },
+                edges: [
+                  {
+                    node: {
+                      id: "cust_acme",
+                      name: "Acme Inc.",
+                      email: "billing@acme.com",
+                      currency: { code: "CAD" },
+                      internalNotes: customerProfileNotes(`alias: acme
+unit: hours
+hourly_rate: 95
+currency: CAD
+default_product_id: prod_consulting
+default_description: Consulting hours
+default_taxes: [Goods and Services Tax]
+send_to: [billing@acme.com]
+payment_terms_days: 15
+invoice_notes: Thank you for your business.`),
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        }),
+      ),
+      graphql.query("ListSalesTaxes", () =>
+        HttpResponse.json({
+          data: {
+            business: {
+              salesTaxes: {
+                edges: [
+                  {
+                    node: {
+                      id: "tax_gst",
+                      name: "Goods and Services Tax",
+                      abbreviation: null,
+                      rate: "0.05",
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        }),
+      ),
+      graphql.mutation("InvoiceCreate", ({ variables }) => {
+        invoiceCreateInput = (variables as { input: Record<string, unknown> }).input;
+        return HttpResponse.json({
+          data: {
+            invoiceCreate: {
+              didSucceed: true,
+              inputErrors: [],
+              invoice: {
+                id: "inv_sent",
+                invoiceNumber: "0002",
+                status: "DRAFT",
+                pdfUrl: "https://wave.example/sent.pdf",
+                subtotal: { value: "240.00" },
+                taxTotal: { value: "12.00" },
+                total: { value: "252.00" },
+              },
+            },
+          },
+        });
+      }),
+      graphql.mutation("InvoiceSend", ({ variables }) => {
+        invoiceSendInput = (variables as { input: Record<string, unknown> }).input;
+        return HttpResponse.json({
+          data: {
+            invoiceSend: {
+              didSucceed: true,
+              inputErrors: [],
+            },
+          },
+        });
+      }),
+    );
+
+    const result = (await createInvoiceForClientTool.handler(
+      {
+        alias: "acme",
+        quantity: 2,
+        invoice_date: "2026-12-01",
+        due_date: "2026-12-20",
+        override_unit_price: 120,
+        send_immediately: true,
+      },
+      makeCtx(),
+    )) as { status: string };
+
+    expect(result.status).toBe("SENT");
+    const capturedInvoiceCreateInput = invoiceCreateInput as Record<string, unknown> | null;
+    expect(capturedInvoiceCreateInput).toMatchObject({
+      invoiceDate: "2026-12-01",
+      dueDate: "2026-12-20",
+      memo: "Thank you for your business.",
+    });
+    if (capturedInvoiceCreateInput === null) {
+      throw new Error("Expected InvoiceCreate variables to be captured");
+    }
+    const items = capturedInvoiceCreateInput.items as Array<Record<string, unknown>>;
+    expect(items[0]).toMatchObject({
+      unitPrice: "120",
+      taxes: [{ salesTaxId: "tax_gst" }],
+    });
+    expect(invoiceSendInput).toEqual({
+      invoiceId: "inv_sent",
+      to: ["billing@acme.com"],
+      attachPDF: true,
+    });
+  });
+
+  it("returns partial invoice state when immediate send fails", async () => {
+    server.use(
+      graphql.query("ListCustomers", () =>
+        HttpResponse.json({
+          data: {
+            business: {
+              customers: {
+                pageInfo: { currentPage: 1, totalPages: 1, totalCount: 1 },
+                edges: [
+                  {
+                    node: {
+                      id: "cust_acme",
+                      name: "Acme Inc.",
+                      email: "billing@acme.com",
+                      currency: { code: "CAD" },
+                      internalNotes: customerProfileNotes(`alias: acme
+hourly_rate: 95
+currency: CAD
+default_product_id: prod_consulting
+send_to: [billing@acme.com]`),
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        }),
+      ),
+      graphql.query("ListSalesTaxes", () =>
+        HttpResponse.json({
+          data: {
+            business: {
+              salesTaxes: { edges: [] },
+            },
+          },
+        }),
+      ),
+      graphql.mutation("InvoiceCreate", () =>
+        HttpResponse.json({
+          data: {
+            invoiceCreate: {
+              didSucceed: true,
+              inputErrors: [],
+              invoice: {
+                id: "inv_draft",
+                invoiceNumber: "0003",
+                status: "DRAFT",
+                pdfUrl: "https://wave.example/draft.pdf",
+                subtotal: { value: "95.00" },
+                taxTotal: { value: "0.00" },
+                total: { value: "95.00" },
+              },
+            },
+          },
+        }),
+      ),
+      graphql.mutation("InvoiceSend", () =>
+        HttpResponse.json({
+          data: {
+            invoiceSend: {
+              didSucceed: false,
+              inputErrors: [{ code: "INVALID_EMAIL", message: "bad recipient", path: ["to"] }],
+            },
+          },
+        }),
+      ),
+    );
+
+    await expect(
+      createInvoiceForClientTool.handler(
+        { alias: "acme", quantity: 1, send_immediately: true },
+        makeCtx(),
+      ),
+    ).rejects.toMatchObject({
+      code: "WAVE_VALIDATION_ERROR",
+      details: {
+        step_failed: "send_invoice",
+        completed_steps: ["create_invoice"],
+        partial_state: { invoice_id: "inv_draft", status: "DRAFT" },
+      },
+    });
+  });
+
+  it("rejects a profile currency that differs from the Wave customer currency", async () => {
+    server.use(
+      graphql.query("ListCustomers", () =>
+        HttpResponse.json({
+          data: {
+            business: {
+              customers: {
+                pageInfo: { currentPage: 1, totalPages: 1, totalCount: 1 },
+                edges: [
+                  {
+                    node: {
+                      id: "cust_acme",
+                      name: "Acme Inc.",
+                      email: "billing@acme.com",
+                      currency: { code: "CAD" },
+                      internalNotes: customerProfileNotes(`alias: acme
+hourly_rate: 95
+currency: USD
+default_product_id: prod_consulting
+send_to: [billing@acme.com]`),
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        }),
+      ),
+    );
+
+    await expect(
+      createInvoiceForClientTool.handler({ alias: "acme", quantity: 1 }, makeCtx()),
+    ).rejects.toMatchObject({
+      code: "CURRENCY_MISMATCH",
+      details: { profile_currency: "USD", customer_currency: "CAD" },
+    });
+  });
+
+  it("rejects profiles that do not define a default product", async () => {
+    server.use(
+      graphql.query("ListCustomers", () =>
+        HttpResponse.json({
+          data: {
+            business: {
+              customers: {
+                pageInfo: { currentPage: 1, totalPages: 1, totalCount: 1 },
+                edges: [
+                  {
+                    node: {
+                      id: "cust_acme",
+                      name: "Acme Inc.",
+                      email: "billing@acme.com",
+                      currency: { code: "CAD" },
+                      internalNotes: customerProfileNotes(`alias: acme
+hourly_rate: 95
+currency: CAD
+send_to: [billing@acme.com]`),
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        }),
+      ),
+      graphql.query("ListSalesTaxes", () =>
+        HttpResponse.json({
+          data: {
+            business: {
+              salesTaxes: { edges: [] },
+            },
+          },
+        }),
+      ),
+    );
+
+    await expect(
+      createInvoiceForClientTool.handler({ alias: "acme", quantity: 1 }, makeCtx()),
+    ).rejects.toMatchObject({
+      code: "MISSING_PRODUCT_ID",
+      details: { alias: "acme", line_index: 0 },
+    });
+  });
 });
