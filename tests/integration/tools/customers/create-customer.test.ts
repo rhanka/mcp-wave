@@ -25,6 +25,13 @@ function makeCtx(): ToolContext {
   };
 }
 
+function makeCtxWithoutDefaultBusiness(): ToolContext {
+  return {
+    ...makeCtx(),
+    env: {} as never,
+  };
+}
+
 describe("create_customer", () => {
   it("wraps notes_yaml between mcp-wave markers and forwards as internalNotes", async () => {
     let received: { input?: Record<string, unknown> } | undefined;
@@ -56,6 +63,15 @@ describe("create_customer", () => {
         name: "Acme",
         email: "billing@example.com",
         currency: "CAD",
+        first_name: "Ada",
+        last_name: "Lovelace",
+        address: {
+          address_line1: "1 Main St",
+          city: "Montreal",
+          province: "QC",
+          postal_code: "H2X 1Y4",
+          country_code: "CA",
+        },
         notes_yaml: "alias: acme\ncurrency: CAD",
       },
       makeCtx(),
@@ -72,6 +88,15 @@ describe("create_customer", () => {
       name: "Acme",
       email: "billing@example.com",
       currency: "CAD",
+      firstName: "Ada",
+      lastName: "Lovelace",
+      address: {
+        addressLine1: "1 Main St",
+        city: "Montreal",
+        provinceCode: "QC",
+        postalCode: "H2X 1Y4",
+        countryCode: "CA",
+      },
       internalNotes: expectedNotes,
     });
     expect(result).toEqual({
@@ -131,5 +156,31 @@ describe("create_customer", () => {
 
     expect(received?.input).toBeDefined();
     expect(received?.input).not.toHaveProperty("internalNotes");
+  });
+
+  it("throws BUSINESS_ID_REQUIRED when no business_id or default business is available", async () => {
+    await expect(
+      createCustomerTool.handler({ name: "No Business" }, makeCtxWithoutDefaultBusiness()),
+    ).rejects.toMatchObject({ code: "BUSINESS_ID_REQUIRED" });
+  });
+
+  it("throws WAVE_EMPTY_CUSTOMER when Wave succeeds without returning a customer", async () => {
+    server.use(
+      graphql.mutation("CustomerCreate", () =>
+        HttpResponse.json({
+          data: {
+            customerCreate: {
+              didSucceed: true,
+              inputErrors: null,
+              customer: null,
+            },
+          },
+        }),
+      ),
+    );
+
+    await expect(
+      createCustomerTool.handler({ name: "Missing Body" }, makeCtx()),
+    ).rejects.toMatchObject({ code: "WAVE_EMPTY_CUSTOMER" });
   });
 });
