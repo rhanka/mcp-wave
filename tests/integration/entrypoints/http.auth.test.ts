@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AppEnv } from "../../../src/config/env.js";
-import { createLogger } from "../../../src/config/logger.js";
+import type { createLogger } from "../../../src/config/logger.js";
 import { AccountMappingLoader } from "../../../src/domain/tax/account-mapping-loader.js";
 import { TaxRatesLoader } from "../../../src/domain/tax/rates-loader.js";
 import { __clearRateLimitBucketsForTests } from "../../../src/server/http/rate-limit.js";
@@ -37,16 +37,30 @@ function mcpHeaders(extra?: Record<string, string>): Record<string, string> {
   };
 }
 
-function appFor(env: AppEnv): ReturnType<typeof buildHttpApp> {
+function appFor(env: AppEnv): {
+  app: ReturnType<typeof buildHttpApp>;
+  logInfo: ReturnType<typeof vi.fn>;
+} {
   const provider = selectProvider(env);
-  return buildHttpApp({
-    env,
-    logger: createLogger({ level: env.LOG_LEVEL, logPII: env.LOG_PII }),
-    provider,
-    wave: new WaveClient({ endpoint: env.WAVE_GRAPHQL_ENDPOINT, provider }),
-    taxRates: new TaxRatesLoader(resolve("data/tax-rates")),
-    accountMapping: new AccountMappingLoader(resolve("data/account-mapping")),
-  });
+  const logInfo = vi.fn();
+  const logger = {
+    info: logInfo,
+    child() {
+      return logger;
+    },
+  };
+
+  return {
+    app: buildHttpApp({
+      env,
+      logger: logger as unknown as ReturnType<typeof createLogger>,
+      provider,
+      wave: new WaveClient({ endpoint: env.WAVE_GRAPHQL_ENDPOINT, provider }),
+      taxRates: new TaxRatesLoader(resolve("data/tax-rates")),
+      accountMapping: new AccountMappingLoader(resolve("data/account-mapping")),
+    }),
+    logInfo,
+  };
 }
 
 async function initialize(
@@ -69,6 +83,14 @@ async function initialize(
   });
 }
 
+function expectIdentityLog(logInfo: ReturnType<typeof vi.fn>, identity: string | RegExp): void {
+  const matcher =
+    typeof identity === "string"
+      ? expect.objectContaining({ identity })
+      : expect.objectContaining({ identity: expect.stringMatching(identity) });
+  expect(logInfo).toHaveBeenCalledWith(matcher, "mcp http request");
+}
+
 describe("http /mcp auth modes", () => {
   beforeAll(async () => {
     process.env.WAVE_AUTH_MODE = "mock";
@@ -87,7 +109,7 @@ describe("http /mcp auth modes", () => {
   });
 
   it("env_token initializes without an Authorization bearer header", async () => {
-    const app = appFor(appEnv("env_token", "server-token"));
+    const { app, logInfo } = appFor(appEnv("env_token", "server-token"));
 
     const response = await initialize(app);
 
@@ -95,10 +117,11 @@ describe("http /mcp auth modes", () => {
     expect(response.headers.get("mcp-session-id")).toBeTruthy();
     const body = (await response.json()) as { result: { serverInfo: { name: string } } };
     expect(body.result.serverInfo.name).toBe("mcp-wave");
+    expectIdentityLog(logInfo, "env-default");
   });
 
   it("bearer_passthrough rejects initialization without an Authorization bearer header", async () => {
-    const app = appFor(appEnv("bearer_passthrough"));
+    const { app, logInfo } = appFor(appEnv("bearer_passthrough"));
 
     const response = await initialize(app);
 
@@ -110,10 +133,11 @@ describe("http /mcp auth modes", () => {
     expect(body.error.message).toBe("AUTH_BEARER_MISSING");
     expect(body.error.data.code).toBe("AUTH_BEARER_MISSING");
     expect(body.error.data.hint).toContain("Authorization: Bearer <token>");
+    expect(logInfo).not.toHaveBeenCalled();
   });
 
   it("bearer_passthrough initializes with an Authorization bearer header", async () => {
-    const app = appFor(appEnv("bearer_passthrough"));
+    const { app, logInfo } = appFor(appEnv("bearer_passthrough"));
 
     const response = await initialize(app, {
       authorization: "Bearer user-wave-token",
@@ -124,5 +148,7 @@ describe("http /mcp auth modes", () => {
     expect(response.headers.get("mcp-session-id")).toBeTruthy();
     const body = (await response.json()) as { result: { serverInfo: { name: string } } };
     expect(body.result.serverInfo.name).toBe("mcp-wave");
+    expectIdentityLog(logInfo, /^bearer:[a-f0-9]{12}$/);
+    expect(JSON.stringify(logInfo.mock.calls)).not.toContain("user-wave-token");
   });
 });
