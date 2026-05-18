@@ -16,6 +16,7 @@ import { upsertProductTool } from "../tools/products/upsert-product.js";
 import { listClientProfilesTool } from "../tools/profiles/list-client-profiles.js";
 import { getPayrollRatesTool } from "../tools/tax/get-payroll-rates.js";
 import { listVendorsTool } from "../tools/vendors/list-vendors.js";
+import { createInvoiceForClientTool } from "../tools/workflows/create-invoice-for-client.js";
 import type { RegisteredTool } from "./define-tool.js";
 
 const TOOLS: RegisteredTool[] = [
@@ -39,6 +40,8 @@ const TOOLS: RegisteredTool[] = [
   deleteInvoiceTool,
   createCustomerTool,
   upsertProductTool,
+  // Workflow tools (Phase B.3)
+  createInvoiceForClientTool,
 ];
 
 export function allTools(): readonly RegisteredTool[] {
