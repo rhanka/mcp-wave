@@ -79,6 +79,12 @@ export class WaveClient {
   listBusinesses(req: RequestContext, vars: SdkArgs<"ListBusinesses">) {
     return this.call(req, "ListBusinesses", vars);
   }
+  getBusinessAccountingSettings(
+    req: RequestContext,
+    vars: SdkArgs<"GetBusinessAccountingSettings">,
+  ) {
+    return this.call(req, "GetBusinessAccountingSettings", vars);
+  }
   listCustomers(req: RequestContext, vars: SdkArgs<"ListCustomers">) {
     return this.call(req, "ListCustomers", vars);
   }

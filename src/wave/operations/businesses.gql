@@ -17,3 +17,10 @@ query ListBusinesses($pageSize: Int = 20, $page: Int = 1) {
     }
   }
 }
+
+query GetBusinessAccountingSettings($businessId: ID!) {
+  business(id: $businessId) {
+    id
+    isClassicAccounting
+  }
+}

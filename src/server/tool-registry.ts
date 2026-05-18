@@ -17,6 +17,7 @@ import { listClientProfilesTool } from "../tools/profiles/list-client-profiles.j
 import { getPayrollRatesTool } from "../tools/tax/get-payroll-rates.js";
 import { listVendorsTool } from "../tools/vendors/list-vendors.js";
 import { createInvoiceForClientTool } from "../tools/workflows/create-invoice-for-client.js";
+import { splitPayrollRemittanceTool } from "../tools/workflows/split-payroll-remittance.js";
 import type { RegisteredTool } from "./define-tool.js";
 
 const TOOLS: RegisteredTool[] = [
@@ -42,6 +43,7 @@ const TOOLS: RegisteredTool[] = [
   upsertProductTool,
   // Workflow tools (Phase B.3)
   createInvoiceForClientTool,
+  splitPayrollRemittanceTool,
 ];
 
 export function allTools(): readonly RegisteredTool[] {
