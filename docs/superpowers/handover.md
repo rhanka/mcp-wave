@@ -1,147 +1,458 @@
-# Handover prompt — mcp-wave (2026-05-09)
+# Handover prompt - mcp-wave to Claude
 
-Copy-paste this whole document into your next agent. It is self-contained.
+Copy-paste this whole document into Claude as the first message of a new
+session. It is intentionally self-contained and current as of 2026-05-18.
 
 ---
 
-## What you're picking up
+## Prompt to Claude
 
-You're continuing the implementation of **mcp-wave**: a TypeScript MCP (Model Context Protocol) server exposing Wave Accounting (waveapps.com) operations to Claude. Deployed serverlessly to GCP Cloud Run (test/validation) and Scaleway Containers (prod runtime).
+Tu reprends le projet `mcp-wave` avec moi. Reponds en francais, de facon
+directe, orientee decision/action, et sans demander a l'utilisateur de refaire
+des choses deja presentes dans l'environnement. Avant de prescrire une action
+utilisateur, verifie d'abord le repo et l'etat local quand c'est possible.
 
-**Project root**: `/home/user/src/mcp-wave/`
-**Branch**: `main` (only branch, this is a from-scratch project)
-**Owner**: Project owner (contact@example.com), French-speaking, Wave account on a Quebec (CA-QC) accounting setup. Address him in French.
+### Identity and operating mode
 
-## Read these files first, in this order
+You are continuing as an engineering agent on a shared Linux workspace.
 
-1. `docs/superpowers/specs/2026-05-09-mcp-wave-design.md` — full design spec, 15 sections.
-2. `docs/superpowers/plans/2026-05-09-mcp-wave-implementation.md` — implementation plan, 82 numbered tasks (Part A foundations + read-only, Part B writes + workflows, Part C deployment).
-3. `docs/superpowers/follow-ups.md` — **READ THIS CAREFULLY**. It captures real findings from inspecting the Wave API yesterday that materially change the plan.
+- Project root: `/home/antoinefa/src/mcp-wave`
+- Repository: `https://github.com/rhanka/mcp-wave.git`
+- Main branch: `main`
+- Current pushed baseline: `233dc91 docs: add multi-track program plan`
+- User language: French
+- User preference: concise, precise, decision-oriented, no vague "maybe"
+- Reporting mode required by the user:
+  - `Fait`
+  - `A faire`
+  - `Attendus`
+- `A faire` must be one consolidated list across all active tracks.
+- `Attendus` is only for decisions or concrete user actions.
 
-## Where we are right now
+The user wants frequent progress updates while work is running, and regular
+commits/pushes to `main` when there is a useful checkpoint.
 
-**Part A Phase A.0 (bootstrap) is DONE and committed.** Tasks A1–A5 of the plan, on `main`:
+### First commands to run
 
-```
-ccfbe61 docs: follow-ups from Wave API discovery
-b7ece3e chore: project skeleton directories with .gitkeep anchors
-3010bdf chore: vitest config and smoke test
-6fc631e chore: biome config
-efd8362 chore: package.json, tsconfig, base dependencies
-619aa25 chore: initial commit with spec and plan
-```
+Start every resumed session with:
 
-`npm run check` (lint + typecheck + test) is green. Node 22.22.2, npm 8.3.0. 446 deps installed.
-
-**Phase A.1 onwards (tasks A6 → A44) NOT STARTED.** Next task to execute is A6 (`src/config/env.ts` with Zod validation), exactly as written in the plan.
-
-## What was just discovered about Wave's API (last commit)
-
-I used Chrome DevTools Protocol (CDP) on the user's existing Chrome at `127.0.0.1:9222` to scrape the public Wave developer docs. Real findings, NOT assumptions:
-
-- **API is alive**, docs refreshed 2026-03-31.
-- **Full Access Token path is still open** for new developers. The user logged in and confirmed the app-creation UI exists at `https://developer-apps.waveapps.com/apps/create/` — no paywall, no "we're no longer accepting".
-- **Schema differences from the plan** (see `follow-ups.md` §2-3):
-  - `invoiceManualPaymentCreate` exists → Task B5 (`mark_invoice_paid`) becomes a 1-line wrapper, NO LONGER a NOT_IMPLEMENTED stub.
-  - **NO `moneyTransactionSplit`, NO `moneyTransactionCategorize`** mutations in the public schema. Task B16 (`split_payroll_remittance`) must be redesigned: Wave's pattern is multi-line `moneyTransactionCreate`, not post-hoc splitting. Spec §10 needs revision. The follow-up doc proposes three options (B.1, B.2, B.3) — discuss with the user before implementing.
-  - `moneyTransactionCreate` is **BETA** and requires `Business.isClassicAccounting === false`. Add a precondition check.
-  - Estimates domain exists (`estimateCreate`, `convertEstimateToInvoice`, …) — v1.1 opportunities, not v1.
-
-## Immediate action items (do these BEFORE resuming A6+)
-
-1. **Get the Wave Full Access Token.** The user is logged into Wave in their Chrome. Direct them to:
-   - Visit `https://developer-apps.waveapps.com/apps/create/`
-   - Fill the app creation form (a few minutes)
-   - Click "Create token" on the resulting app
-   - Save it ONLY in `.env` (never paste it in chat): `echo 'WAVE_API_TOKEN=...' >> .env` from their own shell
-   - Wave's docs link: `https://developer.waveapps.com/hc/en-us/articles/360019762711-Manage-Applications`
-
-2. **Replace the hand-stub Wave schema with the real one.** Once `.env` has the token, run from project root:
-   ```bash
-   npm run codegen:introspect   # this script is referenced in plan task A23; create the codegen.introspect.yml if not present
-   ```
-   This overwrites `data/wave-schema.graphql` with the live schema. Then `npm run codegen` regenerates the TS SDK.
-   The introspect script doesn't exist yet (it's part of plan task A23). If you need to fetch the schema before reaching A23, write a one-shot `node` script using `get-graphql-schema` or `graphql-cli` against `https://gql.waveapps.com/graphql/public` with the Bearer token.
-
-3. **Update spec §10 and plan Tasks B5/B9/B16** to reflect the real schema. Use `follow-ups.md` §3 as the source of truth. Specifically:
-   - Plan Task B5: replace `NOT_IMPLEMENTED` stub with `invoiceManualPaymentCreate` wrapper. Verify exact input shape post-introspection.
-   - Plan Task B16: redesign around multi-line `moneyTransactionCreate`. Document the v1 limitation: imported single-line bank transactions can't be split via API (recommend Wave UI for that case).
-   - Plan Task B9 (`categorize_transaction`): probably drop or convert to "update line items via patch" once schema is known.
-   - Add a startup check in `src/wave/client.ts` that queries `business { isClassicAccounting }` once per business and surfaces a `CLASSIC_ACCOUNTING_NOT_SUPPORTED` error if true.
-
-4. **Then resume the plan at Task A6** (env validation with Zod). Follow it task-by-task, TDD.
-
-## Constraints / decisions already locked (don't re-litigate)
-
-- **Single tenant, env-var token (option A)** for v1. Pluggable for option C (Bearer passthrough / Claude Connector) later — interface already designed (see spec §11). Don't add OAuth resource-server in v1.
-- **No Terraform.** Deploys are TypeScript scripts (`tsx`) wrapping `gcloud` / `scw` CLIs. Reason: 1 service per cloud doesn't justify TF.
-- **Hono + MCP SDK Streamable HTTP** for the HTTP entrypoint. **stdio** for local/dev/Claude Desktop. Both transports day 1.
-- **Stateless runtime.** No DB, no KV. Tax rates live in `data/tax-rates/*.yaml` (committed). Client profiles live in Wave's `customer.internalNotes` field (parsed at request time). Account mappings in `data/account-mapping/default.yaml` (committed).
-- **The LLM never does monetary arithmetic.** All tax/total math happens in deterministic `src/domain/` functions. Tools return already-computed values.
-- **TDD** with Vitest + msw (mocked Wave GraphQL). Coverage gates: `src/domain/**` ≥95%, global ≥85%.
-- **Lint with Biome**, no ESLint.
-- **Cloud Run = test/validation environment, Scaleway Containers = production.** GCP-validated SHA gets promoted to Scaleway via a `promote.ts` script (plan Task C10).
-
-## Working access patterns
-
-**CDP-driven Chrome inspection** (we used this to validate the Wave API state):
-- Chrome with `--remote-debugging-port=9222` is running on the user's machine.
-- Get tab list: `curl -s http://127.0.0.1:9222/json/list | jq .`
-- WS-based driver scripts live in `/tmp/wave-cdp-{check,grep,inspect}.mjs` from the previous session (recreate if missing — they're tiny, ~50 lines each, use Node 22 native `WebSocket`).
-- Pattern: connect to a target's `webSocketDebuggerUrl`, send `Page.navigate` + `Runtime.evaluate` JSON-RPC commands.
-- **Limitation:** can't reliably handle login flows. User logs in manually; we drive the rest.
-
-**Bash / git commands:** standard. Commit messages use:
-```
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+```bash
+cd /home/antoinefa/src/mcp-wave
+git status -sb
+git log -5 --oneline --decorate
+sed -n '1,260p' plan.md
+sed -n '1,180p' README.md
 ```
 
-## Things that don't work / anti-patterns
+Do not assume the repo is clean. Do not revert user changes. A local `.gemini/`
+directory may be untracked and should not be committed unless the user
+explicitly asks for it.
 
-- **Don't ask the user for their Wave password.** They log in themselves in Chrome; we drive the post-login navigation via CDP.
-- **Don't paste the `WAVE_API_TOKEN` in chat.** It's a Bearer-equivalent. User puts it directly in `.env` from their shell.
-- **Don't `npm install -g`.** Project deps only.
-- **Don't write fake/stub implementations to "make tests pass".** If a Wave mutation doesn't exist (as we discovered for split), redesign the tool, document the limitation, but don't fake it.
-- **Don't add Terraform, Bun, Yarn, pnpm.** Stack is locked: Node 22, npm, tsx, Biome, Vitest.
-- **Don't commit `WAVE_API_TOKEN` or any secret.** `.env` is gitignored. `.deploy.env` too.
+### Read these files before changing direction
 
-## Hard files reference
+1. `plan.md`
+   - This is now the top-level program tracker.
+   - It tracks 3 product tracks:
+     - MCP connector maturity
+     - Self-enrollment application
+     - Claude.ai / store distribution
 
-| Path | Purpose |
-|---|---|
-| `package.json` | scripts: `build`, `typecheck`, `lint`, `test`, `coverage`, `codegen`, `dev:stdio`, `dev:http`, `check` |
-| `tsconfig.json` | strict everything, NodeNext, target ES2023 |
-| `biome.json` | lint + format config |
-| `vitest.config.ts` | Vitest with coverage gates |
-| `.gitignore` | excludes `src/wave/generated/sdk.ts` (re-generate from codegen) |
-| `data/tax-rates/.gitkeep` | jurisdiction × year YAML tables go here |
-| `data/account-mapping/.gitkeep` | per-business Wave account_id mapping |
-| `src/{config,lib,domain,wave,server,tools,entrypoints}/` | scaffolded but empty (no `.ts` files yet) |
-| `tests/{unit,integration,e2e}/` | scaffolded; `tests/unit/smoke.test.ts` is the only test |
-| `docs/superpowers/{specs,plans,follow-ups}/...` | full design + implementation contracts |
+2. `README.md`
+   - Current tool catalog and local run instructions.
 
-## Next steps in plain English
+3. `docs/superpowers/follow-ups.md`
+   - Confirmed Wave API findings and constraints.
 
-1. Get the Wave Full Access Token (user action).
-2. Run `npm run codegen:introspect` (you may need to create `codegen.introspect.yml` first per plan Task A23).
-3. Apply the three plan revisions from §3 of `follow-ups.md`. Commit with `docs: revise plan for confirmed Wave schema`.
-4. Execute plan Task A6 (env validation). Then A7, A8, A9, A10 (lib basics). Then Phase A.2 (domain) A11–A17. Etc.
-5. After Task A28 (MCP server bootstrap), the project is ready for the read-only tool batch (A29–A44).
-6. Tag `v0.1.0-part-a` when A44 ships and `npm run check` is green.
+4. `docs/superpowers/specs/2026-05-09-mcp-wave-design.md`
+   - Original design spec. Some parts are superseded by confirmed schema
+     findings in `follow-ups.md` and by `plan.md`.
 
-The plan was written to be subagent-executable. Each task has explicit Files / Steps / Code / Verify / Commit blocks. Follow them literally.
+5. `docs/superpowers/plans/2026-05-09-mcp-wave-implementation.md`
+   - Original detailed implementation plan. Useful for historical task detail,
+     but do not restart from A6 or old bootstrap tasks. The repo has moved far
+     beyond that point.
 
-## If you hit ambiguity or a Wave-schema surprise
+### Current repo state
 
-1. Don't guess. Use the same CDP pattern to confirm against the live API Reference: `https://developer.waveapps.com/hc/en-us/articles/360019968212-API-Reference`.
-2. Update `docs/superpowers/follow-ups.md` with what you found.
-3. Surface the question to the user before changing the spec.
+The MCP connector is already implemented enough for local real-world use.
 
-## User communication style
+Current MCP surface: 26 tools.
 
-- French by default (user replies in French; he uses brief French sentences).
-- Direct, technical, no fluff.
-- He pushes back on yak shaving (he correctly killed Terraform and bash scripts in favor of TS scripts).
-- He explicitly trusts your judgment on technical tradeoffs — but expects you to *make* a recommendation rather than ask "what do you prefer?".
+Read tools:
 
-Good luck. Pick up at action item #1.
+- `list_businesses`
+- `list_customers`
+- `get_customer`
+- `list_invoices`
+- `get_invoice`
+- `get_invoice_payment`
+- `download_invoice_pdf`
+- `list_products`
+- `list_vendors`
+- `list_accounts`
+- `get_account`
+- `list_client_profiles`
+- `get_payroll_rates`
+
+Write tools:
+
+- `create_invoice`
+- `send_invoice`
+- `mark_invoice_paid`
+- `update_invoice_payment`
+- `delete_invoice_payment`
+- `send_invoice_payment_receipt`
+- `delete_invoice`
+- `create_customer`
+- `upsert_product`
+
+Workflow tools:
+
+- `create_invoice_for_client`
+- `audit_account_mapping`
+- `setup_account_mapping`
+- `split_payroll_remittance`
+
+Recent important commits on `main`:
+
+```text
+233dc91 docs: add multi-track program plan
+3f78fac feat(workflows): audit account mapping readiness
+72a5c23 feat(invoices): add invoice payment reconciliation tools
+3cbcd70 fix(scripts): load .env in dev entrypoints
+ff86148 docs: README quick-start with v1 tool catalog
+```
+
+### Verification status already achieved
+
+Recently verified successfully:
+
+```bash
+npm run typecheck
+npm run lint
+npm test -- tests/integration/tools/invoices tests/integration/tools/workflows tests/integration/server
+```
+
+The last broad targeted verification covered:
+
+- invoice payment tools
+- workflow tools
+- server registry
+
+Before claiming new completion, run fresh verification relevant to the change.
+For broad connector changes, prefer:
+
+```bash
+npm run typecheck
+npm run lint
+npm test -- tests/integration/tools/invoices tests/integration/tools/workflows tests/integration/server
+```
+
+For full release readiness, use:
+
+```bash
+npm run check
+npm run coverage
+```
+
+### Critical Wave API constraints
+
+Do not invent capabilities that Wave does not expose.
+
+Confirmed limitations in the public Wave API:
+
+- No transaction read surface for imported bank transactions.
+- No public `moneyTransactionSplit`.
+- No public `moneyTransactionCategorize`.
+- No public `moneyTransactionMatchToInvoice`.
+- No public financial reports API such as P&L or balance sheet.
+
+Practical consequence:
+
+- `split_payroll_remittance` does not target an imported Desjardins transaction.
+- It creates a new multi-line withdrawal transaction using
+  `moneyTransactionCreate`.
+- It can use a bank account as anchor, but cannot select or mutate an already
+  imported bank transaction.
+- Imported bank-transaction reconciliation remains manual in Wave unless a
+  separate browser-automation or private-surface spike is explicitly opened.
+
+The user has already seen Gemini report:
+
+> Je n'ai malheureusement pas acces a l'outil permettant de lire les
+> transactions bancaires individuelles ou le solde en temps reel des comptes
+> dans Wave via l'API actuelle.
+
+That report is aligned with the known API constraint. Do not treat it as a
+Gemini/MCP configuration bug.
+
+### Accounting/reconciliation framing
+
+Use these distinctions consistently:
+
+1. Invoice-payment reconciliation
+   - Supported through:
+     - `mark_invoice_paid`
+     - `get_invoice_payment`
+     - `update_invoice_payment`
+     - `delete_invoice_payment`
+     - `send_invoice_payment_receipt`
+
+2. Payroll/remittance entry creation
+   - Supported through:
+     - `audit_account_mapping`
+     - `setup_account_mapping`
+     - `split_payroll_remittance`
+   - Requires explicit amounts from Payevo or another payroll system.
+
+3. Imported bank-transaction reconciliation
+   - Not supported through the public Wave API.
+   - Current honest answer: manual in Wave UI, or open a separate automation
+     spike after user decision.
+
+### Required UAT gate for accounting reconciliation
+
+The required UAT is `UAT-R1` from `plan.md`.
+
+Purpose: validate what the connector can really do today for accounting
+reconciliation.
+
+Inputs:
+
+- one real Wave business
+- one real connected bank account, ideally Desjardins
+- one real account-mapping file or confirmed absence of one
+- one real Payevo remittance/payroll statement
+
+Test script:
+
+1. Run `audit_account_mapping` for `CA-QC`.
+2. Confirm Desjardins appears in `cash_and_bank_accounts`.
+3. Confirm each remittance authority is one of:
+   - `mapped`
+   - `unmapped`
+   - `configured_account_missing`
+   - `configured_account_not_liability`
+4. Fix mapping until required authorities are `mapped`.
+5. Run `split_payroll_remittance` from a real Payevo statement.
+6. Verify the created accounting transaction in Wave.
+7. Explicitly confirm that any imported Desjardins transaction remains manual
+   unless `WP-MCP-04` opens a separate automation path.
+
+Pass criteria:
+
+- mapping audit is accurate
+- bank account selection is visible and usable
+- remittance split posts correctly
+- no one mistakes this for imported-transaction reconciliation automation
+
+### Immediate recommended priority
+
+Stay on Track 1 until `UAT-R1` is closed.
+
+Recommended next work:
+
+1. Help the user run and interpret `audit_account_mapping`.
+2. If mapping is missing, use `setup_account_mapping` to generate the YAML body.
+3. If mapping is wrong, guide the exact correction in
+   `data/account-mapping/default.yaml`.
+4. Test `split_payroll_remittance` only after the mapping is correct.
+5. Record the `WP-MCP-04` decision:
+   - `A`: public API only; imported bank reconciliation remains manual
+   - `B`: open a separate browser-automation/private-surface spike
+
+Do not start the SPA until the user accepts the sequencing or explicitly asks
+to parallelize Track 2.
+
+### Track 2: self-enrollment application
+
+The user wants a Svelte SPA based on the Sentropic design system, plus a
+TypeScript backend, to let users enroll their Wave session themselves and
+receive MCP connection material for Claude, Gemini, Codex, or generic clients.
+
+Planned architecture in `plan.md`:
+
+- `npm` workspaces in this repo
+- `apps/console-web`: Svelte SPA, Sentropic design system
+- `apps/console-api`: TypeScript backend, preferably Hono for consistency
+- existing `src/`: MCP runtime until an explicit repo split
+
+Do not implement this directly without first producing the dedicated technical
+implementation plan for `WP-APP-01`, unless the user explicitly asks to start
+coding immediately.
+
+Track 2 workpackages:
+
+- `WP-APP-01`: workspace and system boundaries
+- `WP-APP-02`: enrollment/auth model, blocked by `WP-MCP-05`
+- `WP-APP-03`: user onboarding UX
+- `WP-APP-04`: managed MCP provisioning
+- `WP-APP-05`: operator console and support flows
+
+Important product constraint:
+
+- Multi-user self-enrollment depends on Wave OAuth viability.
+- If Wave OAuth is not viable for target users, the app becomes a managed-secret
+  service, which changes operator responsibility and must be explicitly
+  accepted by the user.
+
+### Track 3: Claude.ai / store distribution
+
+Treat Claude.ai store/plugin distribution as optional until feasibility is
+confirmed.
+
+Track 3 workpackages:
+
+- `WP-CLAUDE-01`: feasibility spike
+- `WP-CLAUDE-02`: packaging path, blocked by `WP-CLAUDE-01`
+- `WP-CLAUDE-03`: fallback generic remote-MCP distribution
+
+Question to answer in the spike:
+
+- Does Claude.ai currently provide personal secret storage for remote tools or
+  plugins?
+- Can a user bring their own Wave secret without the operator storing it?
+- Is there a real store/plugin packaging route available now?
+
+Do not let Track 3 block Track 1 or Track 2.
+
+### MCP client setup history
+
+The user is not using Claude Desktop. He has used Gemini successfully with this
+MCP and listed invoices.
+
+Relevant Gemini project path:
+
+```text
+/home/antoinefa/Documents/perso/canada/societe/impots2025
+```
+
+The project-level Gemini config was previously set to launch `mcp-wave` over
+stdio from that directory. Do not assume it is versioned in this repo.
+
+Expected config shape:
+
+```json
+{
+  "mcpServers": {
+    "waveapps": {
+      "command": "bash",
+      "args": [
+        "-lc",
+        "cd /home/antoinefa/src/mcp-wave && node --env-file-if-exists=.env --import tsx/esm src/entrypoints/stdio.ts"
+      ]
+    }
+  }
+}
+```
+
+If Gemini cannot see a tool, first verify the MCP command starts from the
+project directory. Do not default to blaming `GEMINI_API_KEY`; the user already
+had Gemini working in his real session.
+
+### Local environment and secrets
+
+The repo already expects `.env` with Wave config. Do not ask the user to create
+or export env vars blindly. Inspect existing files and scripts first.
+
+Known scripts:
+
+```bash
+npm run dev:stdio
+npm run dev:http
+npm run codegen
+npm run codegen:introspect
+npm run typecheck
+npm run lint
+npm run test
+npm run coverage
+npm run check
+```
+
+`package.json` currently requires Node `>=24`.
+
+Never commit:
+
+- `.env`
+- `.env.*` except `.env.example`
+- `.deploy.env`
+- `.gemini/` unless explicitly requested
+- generated SDK under `src/wave/generated/sdk.ts` because it is gitignored
+
+### Git discipline
+
+User wants regular commits and pushes to `main`.
+
+For meaningful changes:
+
+```bash
+git status -sb
+npm run lint
+npm run typecheck
+# run targeted tests relevant to the change
+git add <changed files>
+git commit -m "<clear message>"
+git push origin main
+```
+
+If `git commit` fails with:
+
+```text
+fatal: Unable to create '.git/index.lock': Read-only file system
+```
+
+that is a sandbox permission issue in Codex-style environments, not a code
+problem. In Claude, use the normal available permission mechanism or ask for the
+minimal approval needed to commit.
+
+Do not rewrite history. Do not reset hard. Do not revert user changes without an
+explicit instruction.
+
+### User communication rules
+
+Always answer operational status with:
+
+```markdown
+**Fait**
+- ...
+
+**A faire**
+- ...
+
+**Attendus**
+- ...
+```
+
+Be precise:
+
+- Say exactly what is blocked and by whom.
+- Say exactly what the user should test.
+- Do not tell the user to set variables or auth that are already present unless
+  you verified they are missing.
+- Avoid broad "we should" statements. Prefer decisions and next actions.
+
+### Recommended first response after reading this handover
+
+After you have read the repo state, answer with a short status in the required
+format:
+
+```markdown
+**Fait**
+- J'ai repris le contexte depuis `plan.md`, `README.md`, `follow-ups.md`, et
+  l'etat git.
+- Je confirme que le blocage transaction bancaire importee est une limite Wave
+  API publique, pas une erreur Gemini/MCP.
+
+**A faire**
+- Finaliser `UAT-R1` avec `audit_account_mapping`.
+- Corriger ou creer `data/account-mapping/default.yaml` si l'audit le demande.
+- Tester `split_payroll_remittance` uniquement a partir d'un exemple Payevo reel.
+- Ensuite, decider `WP-MCP-04`: public API only ou spike automation.
+
+**Attendus**
+- Retour utilisateur attendu: sortie de `audit_account_mapping` sur `CA-QC`.
+- Decision attendue apres UAT: rester public-API-only ou ouvrir un spike
+  d'automatisation des transactions importees.
+```
+
+Then continue the work; do not ask the user to restate the project.
