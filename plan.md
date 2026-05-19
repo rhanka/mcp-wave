@@ -102,21 +102,23 @@ limits, useful for daily bookkeeping, and safe to operate.
 - user can audit mappings, select the bank account, and create a remittance
   split from payroll-system outputs
 
-### WP-MCP-04 - Imported-transaction reconciliation gap `[in_progress]`
+### WP-MCP-04 - Imported-transaction reconciliation gap `[decided: option A, UAT pending]`
 
-**Decision**
-- Keep the public-API track honest: no fake reconciliation tool claims.
+**Decision (2026-05-18)**
+- Option **A** retained: public-API only. Imported-bank-transaction reconciliation stays
+  manual in the Wave UI. No browser-automation or private-surface spike opened.
+- The connector documentation and UAT must keep stating this gap explicitly.
 
 **Outcome**
 - explicit capability matrix in docs and UAT
 - clear distinction between:
   - invoice-payment reconciliation
   - remittance-entry creation
-  - imported-bank-transaction reconciliation
+  - imported-bank-transaction reconciliation (manual, out of scope)
 
 **Exit**
 - UAT script and operator docs state exactly what is and is not automated
-- product decision recorded on whether to open a browser-automation spike
+- decision recorded above; no automation track opened
 
 ### WP-MCP-05 - Multi-tenant auth readiness `[planned]`
 
@@ -280,19 +282,19 @@ are stable enough to justify it.
 
 ## Recommended execution order
 
-1. Finish `UAT-R1` on the current MCP track.
-2. Record the product decision for `WP-MCP-04`:
-   - `A`: stay public-API-only and keep imported-bank reconciliation manual
-   - `B`: open a separate browser-automation/private-surface spike
-3. Write the dedicated technical implementation plan for `WP-APP-01`.
-4. Only after `WP-MCP-05`, execute `WP-APP-02`.
-5. Run `WP-CLAUDE-01` only after the app track has a stable enrollment model.
+Parallelization authorized by user on 2026-05-18. Tracks 1/2/3 run concurrently.
+
+1. Track 1: close `UAT-R1`. `WP-MCP-04` is already decided (option A).
+2. Track 2: write the `WP-APP-01` implementation plan, then iterate.
+3. Track 3: run `WP-CLAUDE-01` feasibility spike, deliver a written go/no-go.
+4. `WP-APP-02` still blocked by `WP-MCP-05` (Wave auth reality).
+5. `WP-CLAUDE-02` still blocked by `WP-CLAUDE-01`.
 
 ## Immediate next actions
 
-- Validate `audit_account_mapping` on the real Wave business.
-- Capture one real Payevo remittance example for `UAT-R1`.
-- Decide whether imported-transaction automation is:
-  - out of scope for the public-API connector
-  - or a separate non-public/browser-automation track
-- After that decision, open the detailed implementation plan for `WP-APP-01`.
+- Track 1: collect real `audit_account_mapping` output on `CA-QC`, then a real
+  Payevo statement, to close `UAT-R1`.
+- Track 2: produce the `WP-APP-01` plan (workspace layout, SPA/back/MCP boundary,
+  shared config strategy) before touching code.
+- Track 3: run `WP-CLAUDE-01` spike and capture current Claude.ai support for
+  remote MCP, per-user secret handling, and store/connector submission.
