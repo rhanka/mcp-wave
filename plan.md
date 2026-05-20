@@ -139,7 +139,7 @@ limits, useful for daily bookkeeping, and safe to operate.
 **Exit**
 - deployed MCP with a repeatable ops path
 
-### WP-OPS-01 - Single-tenant Kapsule deploy `[cadrage]`
+### WP-OPS-01 - Single-tenant Kapsule deploy `[scope decided]`
 
 **Context**
 - Urgent deploy path extracted from `WP-MCP-06` so the current MCP can run
@@ -155,13 +155,17 @@ limits, useful for daily bookkeeping, and safe to operate.
   health/readiness, and smoke check
 - single-tenant Wave token operation, suitable for current personal use
 
-**Open decision**
-- Choose whether `WP-OPS-01` ships a fast Gemini-only MVP first, or includes
-  OAuth 2.x for Claude.ai before first deploy.
+**Decision (2026-05-20)**
+- Option **2** retained: `WP-OPS-01` includes OAuth 2.x support before the first
+  Kapsule deploy.
+- Consequence: first live deploy must be usable by Claude.ai and Gemini remote
+  clients, not only by a Gemini-only/shared-header MVP.
 
 **Exit**
 - MCP reachable from the personal Scaleway Kapsule environment with a repeatable
   redeploy path
+- Claude.ai can complete an OAuth-backed remote MCP connection against the
+  deployed endpoint
 
 ## Track 2 - Self-enrollment application
 
@@ -337,9 +341,7 @@ Parallelization authorized by user on 2026-05-18. Tracks 1/2/3 run concurrently.
 
 - Track 1: collect real `audit_account_mapping` output on `CA-QC`, then a real
   Payevo statement, to close `UAT-R1`.
-- WP-OPS-01: decide scope after the Claude.ai OAuth finding:
-  - fast Gemini-only MVP now, OAuth in a separate WP; or
-  - include OAuth 2.x before first deploy.
+- WP-OPS-01: write the OAuth 2.x + Kapsule deploy design/spec before coding.
 - Track 2: finish `WP-APP-01` cadrage by deciding shared TypeScript config,
   shared types/package strategy, and the exact Sentropic npm package name.
 - Track 3: commit and use `docs/superpowers/claude-distribution-spike.md`; next
