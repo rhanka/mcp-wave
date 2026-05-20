@@ -1,6 +1,6 @@
 # mcp-wave Program Plan
 
-Updated: 2026-05-18
+Updated: 2026-05-20
 
 This file is the top-level program tracker. It does not replace the detailed
 implementation material already stored in:
@@ -133,12 +133,35 @@ limits, useful for daily bookkeeping, and safe to operate.
 ### WP-MCP-06 - Deployment and ops hardening `[planned]`
 
 **Outcome**
-- Cloud Run validation path
-- Scaleway production path
+- Scaleway/Kapsule validation and production path
 - secret management, health checks, smoke checks, operator runbooks
 
 **Exit**
 - deployed MCP with a repeatable ops path
+
+### WP-OPS-01 - Single-tenant Kapsule deploy `[cadrage]`
+
+**Context**
+- Urgent deploy path extracted from `WP-MCP-06` so the current MCP can run
+  persistently while Tracks 2 and 3 continue.
+- Target platform is Scaleway only: Kapsule cluster in the POC project.
+- Image registry is Scaleway Container Registry for now. Docker Hub public can
+  be revisited later, but is not part of the current scope.
+- No GCP/Cloud Run path is active for this WP.
+
+**Outcome**
+- Docker image build path for the current MCP runtime
+- Kubernetes manifests/runbook for Deployment, Service, Ingress, Secret,
+  health/readiness, and smoke check
+- single-tenant Wave token operation, suitable for current personal use
+
+**Open decision**
+- Choose whether `WP-OPS-01` ships a fast Gemini-only MVP first, or includes
+  OAuth 2.x for Claude.ai before first deploy.
+
+**Exit**
+- MCP reachable from the personal Scaleway Kapsule environment with a repeatable
+  redeploy path
 
 ## Track 2 - Self-enrollment application
 
@@ -151,17 +174,28 @@ MCP endpoint/config, and let us operate the service.
 - `npm` workspaces in this repo
 - `apps/console-web`: Svelte SPA, Sentropic design system
 - `apps/console-api`: TypeScript backend, preferably Hono for consistency
-- `src/`: existing MCP service kept as the MCP runtime until an explicit repo split
+- `apps/mcp-server`: existing MCP service moved out of root `src/` during
+  `WP-APP-01`
 
-### WP-APP-01 - Workspace and system boundaries `[planned]`
+### WP-APP-01 - Workspace and system boundaries `[cadrage]`
+
+**Working decisions (2026-05-19)**
+- scope: **B - scaffolding Hello**
+- layout: move root `src/` to `apps/mcp-server`
+- orchestration: npm workspaces only plus root scripts
+- Sentropic source: npm package, exact package name still needed before install
+- deployment target: Scaleway/Kapsule
 
 **Outcome**
 - decide monorepo layout
 - define responsibility split between SPA, app backend, and MCP runtime
 - define shared config/package strategy
+- scaffold `apps/console-web`, `apps/console-api`, and `apps/mcp-server` enough
+  to prove a Hello path without starting business/auth work
 
 **Exit**
 - agreed file layout and deployment topology
+- both new apps can start, and console web can call a minimal console API route
 
 ### WP-APP-02 - Enrollment/auth model `[blocked by WP-MCP-05]`
 
@@ -210,29 +244,34 @@ MCP endpoint/config, and let us operate the service.
 **Goal:** add Claude-facing distribution only after the MCP and enrollment app
 are stable enough to justify it.
 
-### WP-CLAUDE-01 - Feasibility spike `[planned]`
+### WP-CLAUDE-01 - Feasibility spike `[done]`
 
 **Outcome**
-- confirm what Claude.ai actually supports for:
-  - personal secret storage
-  - remote MCP connection UX
-  - store/plugin packaging
+- completed in `docs/superpowers/claude-distribution-spike.md`
+- Claude.ai supports custom remote MCP connectors, but requires OAuth 2.x for
+  authenticated remote connectors; pasted static bearer tokens are not supported
+- official Connectors Directory exists with manual Anthropic review
+- deep link exists for pre-filling the Add custom connector modal
+- policy risk remains around the Directory's "Financial transactions" wording
 
 **Exit**
-- written go/no-go decision based on current Anthropic capabilities
+- written go/no-go captured with sources and recommendation
 
-### WP-CLAUDE-02 - Packaging path `[blocked by WP-CLAUDE-01]`
+### WP-CLAUDE-02 - Packaging path `[blocked by OAuth + policy clarification]`
 
 **Outcome**
-- define the shipping format if the store/plugin path is real
+- prepare a Directory submission path if OAuth is implemented and Anthropic
+  confirms the Wave accounting use case is acceptable
 
 **Exit**
 - one approved distribution format
 
-### WP-CLAUDE-03 - Fallback distribution `[planned]`
+### WP-CLAUDE-03 - Fallback distribution `[planned, recommended]`
 
 **Outcome**
 - keep a first-class generic remote-MCP path even if the Claude store path exists
+- include a Claude.ai deep link once a remote MCP endpoint and OAuth-compatible
+  auth path exist
 
 **Exit**
 - Claude.ai is an optional channel, not a hard dependency
@@ -285,16 +324,23 @@ are stable enough to justify it.
 Parallelization authorized by user on 2026-05-18. Tracks 1/2/3 run concurrently.
 
 1. Track 1: close `UAT-R1`. `WP-MCP-04` is already decided (option A).
-2. Track 2: write the `WP-APP-01` implementation plan, then iterate.
-3. Track 3: run `WP-CLAUDE-01` feasibility spike, deliver a written go/no-go.
-4. `WP-APP-02` still blocked by `WP-MCP-05` (Wave auth reality).
-5. `WP-CLAUDE-02` still blocked by `WP-CLAUDE-01`.
+2. Track 1/ops: choose `WP-OPS-01` scope, then ship the single-tenant Kapsule
+   deployment path.
+3. Track 2: finish `WP-APP-01` cadrage, write the spec and implementation plan,
+   then iterate.
+4. Track 3: use the completed `WP-CLAUDE-01` spike to sequence deep-link
+   fallback first and Directory packaging later.
+5. `WP-APP-02` still blocked by `WP-MCP-05` (Wave auth reality).
+6. `WP-CLAUDE-02` still blocked by OAuth implementation and policy clarification.
 
 ## Immediate next actions
 
 - Track 1: collect real `audit_account_mapping` output on `CA-QC`, then a real
   Payevo statement, to close `UAT-R1`.
-- Track 2: produce the `WP-APP-01` plan (workspace layout, SPA/back/MCP boundary,
-  shared config strategy) before touching code.
-- Track 3: run `WP-CLAUDE-01` spike and capture current Claude.ai support for
-  remote MCP, per-user secret handling, and store/connector submission.
+- WP-OPS-01: decide scope after the Claude.ai OAuth finding:
+  - fast Gemini-only MVP now, OAuth in a separate WP; or
+  - include OAuth 2.x before first deploy.
+- Track 2: finish `WP-APP-01` cadrage by deciding shared TypeScript config,
+  shared types/package strategy, and the exact Sentropic npm package name.
+- Track 3: commit and use `docs/superpowers/claude-distribution-spike.md`; next
+  actionable path is deep-link fallback plus OAuth prerequisite planning.
