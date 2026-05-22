@@ -139,7 +139,7 @@ limits, useful for daily bookkeeping, and safe to operate.
 **Exit**
 - deployed MCP with a repeatable ops path
 
-### WP-OPS-01 - Single-tenant Kapsule deploy `[spec review]`
+### WP-OPS-01 - Single-tenant Kapsule deploy `[implementation ready]`
 
 **Context**
 - Urgent deploy path extracted from `WP-MCP-06` so the current MCP can run
@@ -163,6 +163,9 @@ limits, useful for daily bookkeeping, and safe to operate.
 
 **Design spec**
 - `docs/superpowers/specs/2026-05-20-wp-ops-01-oauth-kapsule-design.md`
+
+**Implementation plan**
+- `docs/superpowers/plans/2026-05-21-wp-ops-01-oauth-kapsule-implementation.md`
 
 **Exit**
 - MCP reachable from the personal Scaleway Kapsule environment with a repeatable
