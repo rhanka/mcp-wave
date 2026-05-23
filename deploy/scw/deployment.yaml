@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-wave
+  labels:
+    app.kubernetes.io/name: mcp-wave
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mcp-wave
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mcp-wave
+    spec:
+      serviceAccountName: mcp-wave
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: mcp-wave
+          image: mcp-wave:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: mcp-wave-config
+            - secretRef:
+                name: mcp-wave-secret
+          volumeMounts:
+            - name: oauth-store
+              mountPath: /var/lib/mcp-wave
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 192Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: oauth-store
+          persistentVolumeClaim:
+            claimName: mcp-wave-oauth-store

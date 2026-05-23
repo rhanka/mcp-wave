@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-wave
+  labels:
+    app.kubernetes.io/name: mcp-wave
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: mcp-wave
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

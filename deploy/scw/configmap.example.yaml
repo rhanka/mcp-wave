@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mcp-wave-config
+  namespace: mcp-wave
+data:
+  NODE_ENV: production
+  PORT: "8080"
+  WAVE_AUTH_MODE: env_token
+  WAVE_GRAPHQL_ENDPOINT: https://gql.waveapps.com/graphql/public
+  LOG_LEVEL: info
+  LOG_PII: "false"
+  ALLOWED_ORIGINS: https://claude.ai,https://claude.com
+  RATE_LIMIT_RPM: "60"
+  PUBLIC_BASE_URL: https://mcp-wave.example.invalid
+  OAUTH_ISSUER_URL: https://mcp-wave.example.invalid
+  OAUTH_STORE_PATH: /var/lib/mcp-wave/oauth-store.json
+  OAUTH_ACCESS_TOKEN_TTL_SECONDS: "3600"
+  OAUTH_REFRESH_TOKEN_TTL_SECONDS: "2592000"
+  OAUTH_AUTH_CODE_TTL_SECONDS: "300"
+  OAUTH_ALLOWED_REDIRECT_URIS: https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback
