@@ -25,10 +25,8 @@ export function oauthConfigFromEnv(env: AppEnv): OAuthRuntimeConfig {
   const publicBaseUrl = new URL(env.PUBLIC_BASE_URL);
   const issuerUrl = new URL(env.OAUTH_ISSUER_URL);
   const resourceServerUrl = new URL("/mcp", publicBaseUrl);
-  const resourceMetadataUrl = new URL(
-    "/.well-known/oauth-protected-resource/mcp",
-    publicBaseUrl,
-  ).href;
+  const resourceMetadataUrl = new URL("/.well-known/oauth-protected-resource/mcp", publicBaseUrl)
+    .href;
 
   return {
     issuerUrl,
