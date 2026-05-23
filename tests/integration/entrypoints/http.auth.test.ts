@@ -20,6 +20,14 @@ function appEnv(mode: AppEnv["WAVE_AUTH_MODE"], apiToken?: string): AppEnv {
     NODE_ENV: "test",
     ALLOWED_ORIGINS: "https://claude.ai,http://localhost:*",
     RATE_LIMIT_RPM: 120,
+    PUBLIC_BASE_URL: "http://localhost:8080",
+    OAUTH_ISSUER_URL: "http://localhost:8080",
+    OAUTH_STORE_PATH: ".data/oauth-store.json",
+    OAUTH_ACCESS_TOKEN_TTL_SECONDS: 3600,
+    OAUTH_REFRESH_TOKEN_TTL_SECONDS: 2592000,
+    OAUTH_AUTH_CODE_TTL_SECONDS: 300,
+    OAUTH_ALLOWED_REDIRECT_URIS:
+      "https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback",
   };
   if (apiToken !== undefined) {
     env.WAVE_API_TOKEN = apiToken;
