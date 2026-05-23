@@ -122,6 +122,26 @@ curl -i http://localhost:8080/mcp \
 The response includes an `mcp-session-id` header. Reuse that header for
 follow-up calls such as `tools/list`.
 
+## OAuth Remote MCP Deploy
+
+The production remote MCP entrypoint is `src/entrypoints/oauth-http.ts`. It exposes:
+
+- OAuth authorization server metadata
+- OAuth protected resource metadata for `/mcp`
+- Dynamic client registration
+- Authorization code + PKCE token exchange
+- Refresh token exchange
+- Token revocation
+- OAuth-protected Streamable HTTP MCP at `/mcp`
+
+The deploy target for `WP-OPS-01` is Scaleway Kapsule with the image running:
+
+```bash
+node dist/entrypoints/oauth-http.js
+```
+
+See `deploy/scw/README.md` for the build, push, deploy, smoke, rollback, secret rotation, and token revocation runbook.
+
 ## Status
 
 Under active development.
