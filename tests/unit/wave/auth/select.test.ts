@@ -13,6 +13,14 @@ const baseEnv = {
   NODE_ENV: "test",
   ALLOWED_ORIGINS: "*",
   RATE_LIMIT_RPM: 60,
+  PUBLIC_BASE_URL: "http://localhost:8080",
+  OAUTH_ISSUER_URL: "http://localhost:8080",
+  OAUTH_STORE_PATH: ".data/oauth-store.json",
+  OAUTH_ACCESS_TOKEN_TTL_SECONDS: 3600,
+  OAUTH_REFRESH_TOKEN_TTL_SECONDS: 2592000,
+  OAUTH_AUTH_CODE_TTL_SECONDS: 300,
+  OAUTH_ALLOWED_REDIRECT_URIS:
+    "https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback",
 } as const satisfies Omit<AppEnv, "WAVE_AUTH_MODE" | "WAVE_API_TOKEN">;
 
 describe("selectProvider", () => {
