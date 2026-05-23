@@ -189,11 +189,6 @@ async function defaultDeps(): Promise<OAuthHttpAppDeps> {
   };
 }
 
-export const appPromise =
-  process.env.NODE_ENV !== "test"
-    ? defaultDeps().then((deps) => buildOAuthHttpApp(deps))
-    : Promise.resolve(null as unknown as Express);
-
 if (process.env.NODE_ENV !== "test") {
   const deps = await defaultDeps();
   const app = buildOAuthHttpApp(deps);
