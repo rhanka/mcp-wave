@@ -42,7 +42,7 @@ spec:
               mountPath: /var/lib/mcp-wave
           readinessProbe:
             httpGet:
-              path: /readyz
+              path: /healthz
               port: http
             initialDelaySeconds: 10
             periodSeconds: 15
