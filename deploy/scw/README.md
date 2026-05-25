@@ -1,5 +1,9 @@
-````markdown
 # mcp-wave Scaleway Kapsule Runbook
+
+For a scripted one-command deploy, run `deploy/scw/deploy.sh`: it validates the
+required env, builds and locally smoke-tests the image, pushes it, applies the
+ConfigMap/Secret and manifests, then runs the smoke checks. The manual steps
+below are the equivalent it automates.
 
 ## Inputs
 
@@ -133,4 +137,3 @@ curl -fsS -X POST "https://${MCP_WAVE_HOST}/revoke" \
   --data-urlencode "client_id=${OAUTH_CLIENT_ID}" \
   --data-urlencode "token=${OAUTH_TOKEN}"
 ```
-````
