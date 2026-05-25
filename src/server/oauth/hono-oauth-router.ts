@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   InvalidClientMetadataError,
   InvalidGrantError,
@@ -71,9 +71,15 @@ export function buildOAuthAsRouter(
       );
     }
     try {
-      const client = await provider.clientsStore.registerClient?.(
-        body as Parameters<NonNullable<typeof provider.clientsStore.registerClient>>[0],
-      );
+      // RFC 7591: the server assigns client_id / client_id_issued_at; the client
+      // only submits metadata (redirect_uris, etc.).
+      const metadata = (body ?? {}) as Record<string, unknown>;
+      const fullClient = {
+        ...metadata,
+        client_id: randomUUID(),
+        client_id_issued_at: Math.floor(Date.now() / 1000),
+      } as Parameters<NonNullable<typeof provider.clientsStore.registerClient>>[0];
+      const client = await provider.clientsStore.registerClient?.(fullClient);
       return c.json(client, 201);
     } catch (e) {
       if (e instanceof InvalidClientMetadataError) {
