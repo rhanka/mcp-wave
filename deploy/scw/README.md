@@ -17,6 +17,31 @@ docker build -t "${IMAGE}" .
 docker push "${IMAGE}"
 ```
 
+### Validate the image before pushing
+
+The runtime stage runs `npm prune --omit=dev`, so **every module imported by the
+production bundle must be in `dependencies`** (not `devDependencies` or only a
+transitive of a devDep) — otherwise the container crashes at startup with
+`ERR_MODULE_NOT_FOUND`. The test suite does not catch this (it runs with dev deps
+installed). Smoke the built image locally first:
+
+```bash
+docker run -d --name mcpw-smoke -p 18080:8080 \
+  -e NODE_ENV=production -e PORT=8080 \
+  -e WAVE_AUTH_MODE=env_token -e WAVE_API_TOKEN=fake -e WAVE_DEFAULT_BUSINESS_ID=biz \
+  -e WAVE_GRAPHQL_ENDPOINT=https://example.invalid/graphql \
+  -e ALLOWED_ORIGINS=https://claude.ai \
+  -e PUBLIC_BASE_URL=https://mcp-wave.example.invalid \
+  -e OAUTH_ISSUER_URL=https://mcp-wave.example.invalid \
+  -e OAUTH_CONSENT_SECRET=fake -e OAUTH_STORE_PATH=/tmp/oauth-store.json \
+  "${IMAGE}"
+curl -fsS http://localhost:18080/healthz                                      # {"ok":true}
+curl -fsS http://localhost:18080/.well-known/oauth-authorization-server       # AS metadata
+curl -fsS http://localhost:18080/.well-known/oauth-protected-resource/mcp     # PRM
+docker logs mcpw-smoke | tail -1   # expect: "mcp-wave oauth hono ready"
+docker rm -f mcpw-smoke
+```
+
 ## Runtime Config
 
 ```bash
