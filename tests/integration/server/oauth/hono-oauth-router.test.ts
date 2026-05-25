@@ -50,6 +50,22 @@ async function buildApp() {
   return { app, provider };
 }
 
+// RFC 7591: clients submit metadata only; the server assigns client_id. Returns it.
+async function register(app: Hono, redirectUris: string[] = [REDIRECT_URI]): Promise<string> {
+  const res = await app.request("http://localhost:8080/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      redirect_uris: redirectUris,
+      token_endpoint_auth_method: "none",
+    }),
+  });
+  expect(res.status).toBe(201);
+  const body = (await res.json()) as { client_id: string };
+  expect(body.client_id).toBeTruthy();
+  return body.client_id;
+}
+
 describe("buildOAuthAsRouter", () => {
   it("1. GET /.well-known/oauth-authorization-server returns 200 with endpoints", async () => {
     const { app } = await buildApp();
@@ -67,21 +83,11 @@ describe("buildOAuthAsRouter", () => {
     expect(body["code_challenge_methods_supported"] as string[]).toContain("S256");
   });
 
-  it("2a. POST /register with valid redirect_uri returns 201 with client_id", async () => {
+  it("2a. POST /register with valid redirect_uri returns 201 with a server-assigned client_id", async () => {
     const { app } = await buildApp();
-    const res = await app.request("http://localhost:8080/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        client_id: "test-client-1",
-        client_id_issued_at: 100,
-        redirect_uris: [REDIRECT_URI],
-        token_endpoint_auth_method: "none",
-      }),
-    });
-    expect(res.status).toBe(201);
-    const body = (await res.json()) as Record<string, unknown>;
-    expect(body["client_id"]).toBe("test-client-1");
+    const clientId = await register(app);
+    expect(typeof clientId).toBe("string");
+    expect(clientId.length).toBeGreaterThan(0);
   });
 
   it("2b. POST /register with invalid redirect_uri returns 400 invalid_client_metadata", async () => {
@@ -90,8 +96,6 @@ describe("buildOAuthAsRouter", () => {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        client_id: "test-client-bad",
-        client_id_issued_at: 100,
         redirect_uris: ["https://evil.example/callback"],
         token_endpoint_auth_method: "none",
       }),
@@ -103,24 +107,11 @@ describe("buildOAuthAsRouter", () => {
 
   it("3. Full flow: register -> POST /authorize -> 302 -> POST /token (auth_code) -> access+refresh tokens", async () => {
     const { app } = await buildApp();
-
-    // Register
-    const regRes = await app.request("http://localhost:8080/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        client_id: "test-client-flow",
-        client_id_issued_at: 100,
-        redirect_uris: [REDIRECT_URI],
-        token_endpoint_auth_method: "none",
-      }),
-    });
-    const regBody = (await regRes.json()) as Record<string, unknown>;
-    expect(regBody["client_id"]).toBe("test-client-flow");
+    const clientId = await register(app);
 
     // POST /authorize with form body and consent secret
     const authBody = new URLSearchParams({
-      client_id: "test-client-flow",
+      client_id: clientId,
       redirect_uri: REDIRECT_URI,
       code_challenge: CHALLENGE,
       code_challenge_method: "S256",
@@ -144,7 +135,7 @@ describe("buildOAuthAsRouter", () => {
     // POST /token with authorization_code
     const tokenBody = new URLSearchParams({
       grant_type: "authorization_code",
-      client_id: "test-client-flow",
+      client_id: clientId,
       code: code ?? "",
       code_verifier: VERIFIER,
       redirect_uri: REDIRECT_URI,
@@ -164,20 +155,9 @@ describe("buildOAuthAsRouter", () => {
 
   it("4. POST /token with wrong code_verifier returns 400 invalid_grant", async () => {
     const { app, provider } = await buildApp();
+    const clientId = await register(app);
 
-    // Register client
-    await app.request("http://localhost:8080/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        client_id: "test-client-pkce",
-        client_id_issued_at: 100,
-        redirect_uris: [REDIRECT_URI],
-        token_endpoint_auth_method: "none",
-      }),
-    });
-
-    const client = await provider.clientsStore.getClient("test-client-pkce");
+    const client = await provider.clientsStore.getClient(clientId);
     if (!client) throw new Error("client not found");
 
     // Issue code with CHALLENGE
@@ -192,7 +172,7 @@ describe("buildOAuthAsRouter", () => {
     // Submit wrong verifier
     const tokenBody = new URLSearchParams({
       grant_type: "authorization_code",
-      client_id: "test-client-pkce",
+      client_id: clientId,
       code,
       code_verifier: "wrong-verifier-that-does-not-match-the-challenge-at-all",
       redirect_uri: REDIRECT_URI,
@@ -209,20 +189,9 @@ describe("buildOAuthAsRouter", () => {
 
   it("5. refresh_token grant returns 200 new tokens", async () => {
     const { app, provider } = await buildApp();
+    const clientId = await register(app);
 
-    // Register client
-    await app.request("http://localhost:8080/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        client_id: "test-client-refresh",
-        client_id_issued_at: 100,
-        redirect_uris: [REDIRECT_URI],
-        token_endpoint_auth_method: "none",
-      }),
-    });
-
-    const client = await provider.clientsStore.getClient("test-client-refresh");
+    const client = await provider.clientsStore.getClient(clientId);
     if (!client) throw new Error("client not found");
 
     // Issue tokens directly
@@ -231,7 +200,7 @@ describe("buildOAuthAsRouter", () => {
 
     const tokenBody = new URLSearchParams({
       grant_type: "refresh_token",
-      client_id: "test-client-refresh",
+      client_id: clientId,
       refresh_token: initialTokens.refresh_token ?? "",
       resource: "http://localhost:8080/mcp",
     });
@@ -250,26 +219,15 @@ describe("buildOAuthAsRouter", () => {
 
   it("6. POST /revoke returns 200", async () => {
     const { app, provider } = await buildApp();
+    const clientId = await register(app);
 
-    // Register client
-    await app.request("http://localhost:8080/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        client_id: "test-client-revoke",
-        client_id_issued_at: 100,
-        redirect_uris: [REDIRECT_URI],
-        token_endpoint_auth_method: "none",
-      }),
-    });
-
-    const client = await provider.clientsStore.getClient("test-client-revoke");
+    const client = await provider.clientsStore.getClient(clientId);
     if (!client) throw new Error("client not found");
 
     const tokens = await provider.issueTokensForTests(client);
 
     const revokeBody = new URLSearchParams({
-      client_id: "test-client-revoke",
+      client_id: clientId,
       token: tokens.access_token,
     });
     const res = await app.request("http://localhost:8080/revoke", {
