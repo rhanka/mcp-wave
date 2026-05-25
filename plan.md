@@ -173,6 +173,26 @@ limits, useful for daily bookkeeping, and safe to operate.
 - Claude.ai can complete an OAuth-backed remote MCP connection against the
   deployed endpoint
 
+### WP-OPS-02 - Hono / mcp-hono runtime migration `[done]`
+
+**Context**
+- WP-OPS-01 shipped the OAuth remote MCP entrypoint on Express because the MCP
+  SDK OAuth helpers are Express-only. This WP migrates the runtime to Hono using
+  the in-house `@sentropic/mcp-hono` framework, removing the Express dependency.
+
+**Outcome**
+- `@sentropic/mcp-hono` supplies the OAuth Resource Server (pluggable
+  `validateToken`); the single-tenant Authorization Server is hand-written Hono
+  routes over `SingleTenantOAuthProvider`.
+- All 26 tools bridged onto the mcp-hono `.tool()` API via the existing
+  `error-bridge`; Express (`express`, `express-rate-limit`, `cors`, `supertest`)
+  removed from direct dependencies.
+- Supersedes the WP-OPS-01 Express runtime; `deploy/scw` and the Docker image are
+  unchanged (still run `dist/entrypoints/oauth-http.js`).
+
+**Implementation plan**
+- `docs/superpowers/plans/2026-05-25-wp-ops-02-mcp-hono-migration.md`
+
 ## Track 2 - Self-enrollment application
 
 **Goal:** ship a Svelte SPA using the Sentropic design system plus a TypeScript
