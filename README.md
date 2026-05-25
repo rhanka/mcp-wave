@@ -124,15 +124,21 @@ follow-up calls such as `tools/list`.
 
 ## OAuth Remote MCP Deploy
 
-The production remote MCP entrypoint is `src/entrypoints/oauth-http.ts`. It exposes:
+The production remote MCP entrypoint is `src/entrypoints/oauth-http.ts`, a
+[Hono](https://hono.dev) app built on [`@sentropic/mcp-hono`](https://www.npmjs.com/package/@sentropic/mcp-hono).
+`@sentropic/mcp-hono` provides the OAuth **Resource Server** (bearer validation,
+protected-resource metadata, `WWW-Authenticate` challenge, MCP protocol
+negotiation and sessions) via a pluggable `validateToken`; the OAuth
+**Authorization Server** (single-tenant) is served by hand-written Hono routes
+over `SingleTenantOAuthProvider`. It exposes:
 
 - OAuth authorization server metadata
 - OAuth protected resource metadata for `/mcp`
-- Dynamic client registration
+- Dynamic client registration (server-assigned `client_id`)
 - Authorization code + PKCE token exchange
 - Refresh token exchange
 - Token revocation
-- OAuth-protected Streamable HTTP MCP at `/mcp`
+- OAuth-protected MCP at `/mcp`
 
 The deploy target for `WP-OPS-01` is Scaleway Kapsule with the image running:
 
