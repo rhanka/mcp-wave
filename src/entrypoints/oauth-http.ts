@@ -1,27 +1,29 @@
 import { randomUUID } from "node:crypto";
-import { createServer } from "node:http";
 import { resolve } from "node:path";
-import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
-import { mcpAuthRouter } from "@modelcontextprotocol/sdk/server/auth/router.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import express, { type Express } from "express";
-import rateLimit from "express-rate-limit";
+import { serve } from "@hono/node-server";
+import { getOAuthContext, mcp } from "@sentropic/mcp-hono";
 import { GraphQLClient } from "graphql-request";
+import { Hono } from "hono";
+import type { z } from "zod";
 import { type AppEnv, parseEnv } from "../config/env.js";
 import { createLogger } from "../config/logger.js";
 import { AccountMappingLoader } from "../domain/tax/account-mapping-loader.js";
 import { TaxRatesLoader } from "../domain/tax/rates-loader.js";
-import { expressOriginAllowlist } from "../server/http/express-origin-allowlist.js";
-import { buildMcpServer } from "../server/mcp-server.js";
+import { toMcpResult } from "../server/error-bridge.js";
+import { originAllowlist } from "../server/http/origin-allowlist.js";
+import { rateLimit } from "../server/http/rate-limit.js";
 import { OAUTH_SCOPE, oauthConfigFromEnv } from "../server/oauth/config.js";
 import { FileOAuthStore } from "../server/oauth/file-store.js";
+import { buildOAuthAsRouter } from "../server/oauth/hono-oauth-router.js";
 import { SingleTenantOAuthProvider } from "../server/oauth/single-tenant-provider.js";
+import { makeValidateToken } from "../server/oauth/token-verifier.js";
+import type { ToolContext } from "../server/tool-context.js";
 import { allTools } from "../server/tool-registry.js";
 import type { WaveCredentialProvider } from "../wave/auth/provider.js";
 import { selectProvider } from "../wave/auth/select.js";
 import { WaveClient } from "../wave/client.js";
 
-export interface OAuthHttpAppDeps {
+export interface OAuthHttpDeps {
   env: AppEnv;
   logger: ReturnType<typeof createLogger>;
   provider: WaveCredentialProvider;
@@ -31,12 +33,9 @@ export interface OAuthHttpAppDeps {
   accountMapping: AccountMappingLoader;
 }
 
-interface OAuthHttpSession {
-  transport: StreamableHTTPServerTransport;
-}
-
-export function buildOAuthHttpApp(deps: OAuthHttpAppDeps): Express {
+export function buildOAuthHonoApp(deps: OAuthHttpDeps): Hono {
   const oauth = oauthConfigFromEnv(deps.env);
+
   const oauthProvider = new SingleTenantOAuthProvider({
     store: deps.oauthStore,
     nodeEnv: deps.env.NODE_ENV,
@@ -50,27 +49,15 @@ export function buildOAuthHttpApp(deps: OAuthHttpAppDeps): Express {
     refreshTokenTtlSeconds: oauth.refreshTokenTtlSeconds,
   });
 
-  const app = express();
-  const sessions = new Map<string, OAuthHttpSession>();
-  const allowedOrigins = deps.env.ALLOWED_ORIGINS.split(",").map((origin) => origin.trim());
+  const app = new Hono();
+  const allowedOrigins = deps.env.ALLOWED_ORIGINS.split(",").map((s) => s.trim());
 
-  app.set("trust proxy", 1);
-  app.disable("x-powered-by");
-  app.use(expressOriginAllowlist(allowedOrigins));
-  app.use(
-    rateLimit({
-      windowMs: 60_000,
-      limit: deps.env.RATE_LIMIT_RPM,
-      standardHeaders: true,
-      legacyHeaders: false,
-    }),
-  );
+  app.use("*", originAllowlist(allowedOrigins));
+  app.use("*", rateLimit(deps.env.RATE_LIMIT_RPM));
 
-  app.get("/healthz", (_req, res) => {
-    res.json({ ok: true });
-  });
+  app.get("/healthz", (c) => c.json({ ok: true }));
 
-  app.get("/readyz", async (_req, res) => {
+  app.get("/readyz", async (c) => {
     const issues: string[] = [];
     try {
       await deps.taxRates.load("CA-QC", new Date().getUTCFullYear());
@@ -83,96 +70,84 @@ export function buildOAuthHttpApp(deps: OAuthHttpAppDeps): Express {
     } catch (e) {
       issues.push(`wave-schema: ${e instanceof Error ? e.message : String(e)}`);
     }
-    if (issues.length > 0) {
-      res.status(503).json({ ok: false, issues });
-      return;
-    }
-    res.json({ ok: true });
+    if (issues.length > 0) return c.json({ ok: false, issues }, 503);
+    return c.json({ ok: true });
   });
 
-  app.use(
-    mcpAuthRouter({
-      provider: oauthProvider,
-      issuerUrl: oauth.issuerUrl,
-      baseUrl: oauth.publicBaseUrl,
-      resourceServerUrl: oauth.resourceServerUrl,
-      resourceName: "mcp-wave",
-      scopesSupported: [OAUTH_SCOPE],
-    }),
-  );
+  // Mount Authorization Server routes at root
+  app.route("/", buildOAuthAsRouter(oauthProvider, oauth, deps.env.NODE_ENV));
 
-  app.all(
-    "/mcp",
-    express.json({ limit: "1mb", type: ["application/json", "application/*+json"] }),
-    requireBearerAuth({
-      verifier: oauthProvider,
-      requiredScopes: [OAUTH_SCOPE],
+  // Serve Protected Resource Metadata at the root-level well-known path.
+  //
+  // The mcp-hono lib mounts its own PRM handler at
+  //   /.well-known/oauth-protected-resource
+  // relative to the McpHono mount point (i.e. /mcp/.well-known/oauth-protected-resource).
+  // Our resourceMetadataUrl is http://host/.well-known/oauth-protected-resource/mcp
+  // (a different root-level path), so the lib does NOT serve it automatically.
+  // We add this route manually so the URL advertised in WWW-Authenticate resolves.
+  app.get("/.well-known/oauth-protected-resource/mcp", (c) => {
+    const body: Record<string, unknown> = {
+      resource: oauth.resourceServerUrl.href,
+      authorization_servers: [oauth.issuerUrl.href],
+      bearer_methods_supported: ["header"],
+      scopes_supported: [OAUTH_SCOPE],
+    };
+    return c.json(body);
+  });
+
+  // Build MCP server with OAuth protection.
+  //
+  // Note: mcp-hono validates tool arguments against the Zod schema BEFORE calling
+  // the handler, returning a JSON-RPC -32602 INVALID_PARAMS error on failure.
+  // This differs from our error-bridge INVALID_INPUT envelope. This is an accepted
+  // behavior change; we do not double-validate here.
+  const server = mcp({
+    name: "mcp-wave",
+    version: "0.1.0",
+    oauth: {
+      issuer: oauth.issuerUrl.href,
+      authorizationServers: [oauth.issuerUrl.href],
+      resource: oauth.resourceServerUrl.href,
       resourceMetadataUrl: oauth.resourceMetadataUrl,
-    }),
-    async (req, res, next) => {
-      try {
-        const requestId = randomUUID();
-        const requestedSessionId = req.header("mcp-session-id");
-        let session = requestedSessionId ? sessions.get(requestedSessionId) : undefined;
-
-        if (!session) {
-          let newSession: OAuthHttpSession | undefined;
-          const transport = new StreamableHTTPServerTransport({
-            enableJsonResponse: true,
-            sessionIdGenerator: () => randomUUID(),
-            onsessioninitialized: (sessionId) => {
-              if (newSession) sessions.set(sessionId, newSession);
-            },
-            onsessionclosed: (sessionId) => {
-              sessions.delete(sessionId);
-            },
-          });
-          newSession = { transport };
-          const clientId = req.auth?.clientId ?? "unknown";
-          const tokenHashPrefix =
-            req.auth?.extra !== undefined && typeof req.auth.extra.tokenHashPrefix === "string"
-              ? req.auth.extra.tokenHashPrefix
-              : "unknown";
-          const identity = `oauth:${clientId}:${tokenHashPrefix}`;
-          const reqCtx = {
-            headers: new Headers(req.headers as Record<string, string>),
-            request_id: requestId,
-          };
-          const { server } = buildMcpServer({
-            tools: allTools(),
-            makeCtx: () => ({
-              req: reqCtx,
-              wave: deps.wave,
-              taxRates: deps.taxRates,
-              accountMapping: deps.accountMapping,
-              env: deps.env,
-              logger: deps.logger.child({ request_id: requestId }),
-              identity,
-            }),
-          });
-          // Cast required: Node.js StreamableHTTPServerTransport exposes
-          // `onclose` as a getter returning `(() => void) | undefined`, which
-          // conflicts with Transport's `onclose?: () => void` under
-          // exactOptionalPropertyTypes. The runtime behaviour is identical.
-          await server.connect(transport as Parameters<typeof server.connect>[0]);
-          session = newSession;
-        }
-
-        deps.logger.info(
-          { request_id: requestId, client_id: req.auth?.clientId },
-          "mcp oauth http request",
-        );
-        await session.transport.handleRequest(req, res, req.body);
-      } catch (error) {
-        next(error);
-      }
+      requiredScopes: [OAUTH_SCOPE],
+      scopesSupported: [OAUTH_SCOPE],
+      validateToken: makeValidateToken(oauthProvider, oauth.issuerUrl.href),
     },
-  );
+  });
+
+  for (const tool of allTools()) {
+    server.tool({
+      name: tool.name,
+      description: tool.description,
+      schema: tool.inputSchema as unknown as z.ZodObject<z.ZodRawShape>,
+      handler: (args, c) => {
+        const requestId = randomUUID();
+        const octx = getOAuthContext(c);
+        const identity =
+          "oauth:" +
+          (octx?.subject ?? "unknown") +
+          ":" +
+          String(octx?.claims?.["tokenHashPrefix"] ?? "unknown");
+        const ctx: ToolContext = {
+          req: { headers: c.req.raw.headers, request_id: requestId },
+          wave: deps.wave,
+          taxRates: deps.taxRates,
+          accountMapping: deps.accountMapping,
+          env: deps.env,
+          logger: deps.logger.child({ request_id: requestId }),
+          identity,
+        };
+        return toMcpResult(tool)(args, ctx);
+      },
+    });
+  }
+
+  app.route("/mcp", server);
 
   return app;
 }
 
-async function defaultDeps(): Promise<OAuthHttpAppDeps> {
+async function defaultDeps(): Promise<OAuthHttpDeps> {
   const env = parseEnv(process.env);
   const logger = createLogger({ level: env.LOG_LEVEL, logPII: env.LOG_PII });
   const provider = selectProvider(env);
@@ -191,9 +166,9 @@ async function defaultDeps(): Promise<OAuthHttpAppDeps> {
 
 if (process.env.NODE_ENV !== "test") {
   const deps = await defaultDeps();
-  const app = buildOAuthHttpApp(deps);
+  const app = buildOAuthHonoApp(deps);
   const port = Number(process.env.PORT ?? 8080);
-  createServer(app).listen(port, () => {
-    deps.logger.info({ port, tools: allTools().length }, "mcp-wave oauth http ready");
+  serve({ fetch: app.fetch, port }, () => {
+    deps.logger.info({ port, tools: allTools().length }, "mcp-wave oauth hono ready");
   });
 }
