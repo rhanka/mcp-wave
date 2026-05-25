@@ -23,6 +23,10 @@ import { randomToken, sha256Hex, timingSafeEqualString, tokenHashPrefix } from "
 import type { FileOAuthStore } from "./file-store.js";
 import { allRedirectUrisAllowed } from "./redirect-uri.js";
 
+export type AuthorizeOutcome =
+  | { kind: "consent"; status: 200 | 401; html: string }
+  | { kind: "redirect"; location: string };
+
 interface ProviderOptions {
   store: FileOAuthStore;
   nodeEnv: AppEnv["NODE_ENV"];
@@ -89,34 +93,31 @@ export class SingleTenantOAuthProvider implements OAuthServerProvider {
     return this.opts.nowSeconds?.() ?? Math.floor(Date.now() / 1000);
   }
 
-  async authorize(
+  async authorizeRequest(
     client: OAuthClientInformationFull,
     params: AuthorizationParams,
-    res: Response,
-  ): Promise<void> {
-    const req = res.req;
-    const body = req.body as { consent_secret?: string } | undefined;
-
-    if (req.method !== "POST") {
-      res
-        .status(200)
-        .type("html")
-        .send(this.renderConsentForm(client, params, undefined));
-      return;
+    input: { method: string; consentSecret?: string },
+  ): Promise<AuthorizeOutcome> {
+    if (input.method !== "POST") {
+      return {
+        kind: "consent",
+        status: 200,
+        html: this.renderConsentForm(client, params, undefined),
+      };
     }
 
     if (
-      !body?.consent_secret ||
-      !timingSafeEqualString(body.consent_secret, this.opts.consentSecret)
+      !input.consentSecret ||
+      !timingSafeEqualString(input.consentSecret, this.opts.consentSecret)
     ) {
-      res
-        .status(401)
-        .type("html")
-        .send(this.renderConsentForm(client, params, "Invalid consent secret"));
-      return;
+      return {
+        kind: "consent",
+        status: 401,
+        html: this.renderConsentForm(client, params, "Invalid consent secret"),
+      };
     }
 
-    const code = await this.issueAuthorizationCodeForTests(client, {
+    const code = await this.issueAuthorizationCode(client, {
       redirectUri: params.redirectUri,
       codeChallenge: params.codeChallenge,
       scopes: this.normalizeScopes(params.scopes),
@@ -127,10 +128,29 @@ export class SingleTenantOAuthProvider implements OAuthServerProvider {
     const redirect = new URL(params.redirectUri);
     redirect.searchParams.set("code", code);
     if (params.state) redirect.searchParams.set("state", params.state);
-    res.redirect(302, redirect.href);
+    return { kind: "redirect", location: redirect.href };
   }
 
-  async issueAuthorizationCodeForTests(
+  async authorize(
+    client: OAuthClientInformationFull,
+    params: AuthorizationParams,
+    res: Response,
+  ): Promise<void> {
+    const req = res.req;
+    const body = req.body as { consent_secret?: string } | undefined;
+    const consentSecret = body?.consent_secret;
+    const outcome = await this.authorizeRequest(client, params, {
+      method: req.method,
+      ...(consentSecret !== undefined && { consentSecret }),
+    });
+    if (outcome.kind === "consent") {
+      res.status(outcome.status).type("html").send(outcome.html);
+    } else {
+      res.redirect(302, outcome.location);
+    }
+  }
+
+  async issueAuthorizationCode(
     client: OAuthClientInformationFull,
     params: IssueCodeParams,
   ): Promise<string> {
