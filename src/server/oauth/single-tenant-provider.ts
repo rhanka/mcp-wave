@@ -6,17 +6,13 @@ import {
   InvalidTargetError,
   InvalidTokenError,
 } from "@modelcontextprotocol/sdk/server/auth/errors.js";
-import type {
-  AuthorizationParams,
-  OAuthServerProvider,
-} from "@modelcontextprotocol/sdk/server/auth/provider.js";
+import type { AuthorizationParams } from "@modelcontextprotocol/sdk/server/auth/provider.js";
 import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import type {
   OAuthClientInformationFull,
   OAuthTokenRevocationRequest,
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
-import type { Response } from "express";
 import type { AppEnv } from "../../config/env.js";
 import { OAUTH_SCOPE } from "./config.js";
 import { randomToken, sha256Hex, timingSafeEqualString, tokenHashPrefix } from "./crypto.js";
@@ -59,7 +55,7 @@ type WideClientsStore = Omit<OAuthRegisteredClientsStore, "registerClient"> & {
   ): OAuthClientInformationFull | Promise<OAuthClientInformationFull>;
 };
 
-export class SingleTenantOAuthProvider implements OAuthServerProvider {
+export class SingleTenantOAuthProvider {
   readonly clientsStore: WideClientsStore;
 
   constructor(private readonly opts: ProviderOptions) {
@@ -129,25 +125,6 @@ export class SingleTenantOAuthProvider implements OAuthServerProvider {
     redirect.searchParams.set("code", code);
     if (params.state) redirect.searchParams.set("state", params.state);
     return { kind: "redirect", location: redirect.href };
-  }
-
-  async authorize(
-    client: OAuthClientInformationFull,
-    params: AuthorizationParams,
-    res: Response,
-  ): Promise<void> {
-    const req = res.req;
-    const body = req.body as { consent_secret?: string } | undefined;
-    const consentSecret = body?.consent_secret;
-    const outcome = await this.authorizeRequest(client, params, {
-      method: req.method,
-      ...(consentSecret !== undefined && { consentSecret }),
-    });
-    if (outcome.kind === "consent") {
-      res.status(outcome.status).type("html").send(outcome.html);
-    } else {
-      res.redirect(302, outcome.location);
-    }
   }
 
   async issueAuthorizationCode(
