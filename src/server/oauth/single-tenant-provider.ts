@@ -154,29 +154,100 @@ export class SingleTenantOAuthProvider {
   ): string {
     const scope = this.normalizeScopes(params.scopes).join(" ");
     const resource = this.normalizeResource(params.resource).href;
-    const errorHtml = error ? `<p role="alert">${escapeHtml(error)}</p>` : "";
+    const clientName = escapeHtml(client.client_name ?? client.client_id);
+    const errorHtml = error ? `<p class="alert" role="alert">${escapeHtml(error)}</p>` : "";
     return `<!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><title>Authorize mcp-wave</title></head>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Connect to Wave · SENT Tech</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<style>
+  :root {
+    --bg: #f8fafc; --surface: #ffffff; --ink: #0f172a; --muted: #475569;
+    --border: #e2e8f0; --brand: oklch(50% 0.134 242.749); --brand-ink: #ffffff;
+    --warn-bg: #fffbeb; --warn-border: #fcd34d; --warn-ink: #92400e;
+    --radius: 0.5rem;
+    --font: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center;
+    background: var(--bg); color: var(--ink); font-family: var(--font);
+    line-height: 1.5; padding: 1.5rem; }
+  .card { width: 100%; max-width: 30rem; background: var(--surface);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: 0 1px 3px rgb(15 23 42 / 0.08); padding: 1.75rem; }
+  .head { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem; }
+  .head svg { width: 40px; height: 40px; border-radius: 10px; flex: none; }
+  .head h1 { font-size: 1.125rem; margin: 0; }
+  .head p { margin: 0; font-size: 0.8125rem; color: var(--muted); }
+  .lead { font-size: 0.9375rem; color: var(--muted); margin: 0 0 1.25rem; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 0.4rem 0.9rem;
+    margin: 0 0 1.25rem; font-size: 0.8125rem; }
+  dt { color: var(--muted); }
+  dd { margin: 0; word-break: break-all; font-family: var(--mono); font-size: 0.75rem; }
+  .disclaimer { background: var(--warn-bg); border: 1px solid var(--warn-border);
+    color: var(--warn-ink); border-radius: var(--radius); padding: 0.75rem 0.9rem;
+    font-size: 0.8125rem; margin: 0 0 1.25rem; }
+  .disclaimer a { color: inherit; font-weight: 600; }
+  label { display: block; font-size: 0.875rem; font-weight: 600; margin-bottom: 0.35rem; }
+  .hint { font-weight: 400; color: var(--muted); font-size: 0.8125rem; }
+  input[type=password] { width: 100%; padding: 0.6rem 0.7rem; font-size: 0.95rem;
+    border: 1px solid var(--border); border-radius: var(--radius);
+    margin-bottom: 1rem; font-family: var(--mono); }
+  input[type=password]:focus { outline: 2px solid var(--brand); outline-offset: 1px; border-color: var(--brand); }
+  button { width: 100%; padding: 0.65rem 1rem; font-size: 0.95rem; font-weight: 600;
+    color: var(--brand-ink); background: var(--brand); border: 0;
+    border-radius: var(--radius); cursor: pointer; }
+  button:hover { filter: brightness(0.94); }
+  .alert { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b;
+    border-radius: var(--radius); padding: 0.6rem 0.8rem; font-size: 0.8125rem; margin: 0 0 1rem; }
+</style>
+</head>
 <body>
-<main>
-<h1>Authorize mcp-wave</h1>
-${errorHtml}
-<form method="post" action="/authorize">
-<input type="hidden" name="response_type" value="code">
-<input type="hidden" name="client_id" value="${escapeHtml(client.client_id)}">
-<input type="hidden" name="redirect_uri" value="${escapeHtml(params.redirectUri)}">
-<input type="hidden" name="code_challenge" value="${escapeHtml(params.codeChallenge)}">
-<input type="hidden" name="code_challenge_method" value="S256">
-<input type="hidden" name="scope" value="${escapeHtml(scope)}">
-<input type="hidden" name="resource" value="${escapeHtml(resource)}">
-${params.state ? `<input type="hidden" name="state" value="${escapeHtml(params.state)}">` : ""}
-<p>Client: ${escapeHtml(client.client_name ?? client.client_id)}</p>
-<p>Redirect URI: ${escapeHtml(params.redirectUri)}</p>
-<p>Scope: ${escapeHtml(scope)}</p>
-<label>Consent secret <input name="consent_secret" type="password" autocomplete="current-password"></label>
-<button type="submit">Authorize</button>
-</form>
+<main class="card">
+  <div class="head">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SENT Tech">
+      <rect width="64" height="64" rx="12" fill="#0f172a"/>
+      <path d="M18 20h28v7H35v17h-8V27h-9z" fill="#ffffff"/>
+      <path d="M18 42h28v4H18z" fill="#2563eb"/>
+    </svg>
+    <div>
+      <h1>Connect to Wave</h1>
+      <p>SENT Tech · Wave MCP connector</p>
+    </div>
+  </div>
+  <p class="lead"><strong>${clientName}</strong> is requesting access to this Wave
+    MCP connector. Approving grants it the <code>mcp:tools</code> scope on this
+    endpoint only &mdash; it never receives your Wave credentials. Enter the
+    operator consent secret (held by whoever deployed this server) to approve.</p>
+  ${errorHtml}
+  <dl>
+    <dt>Client</dt><dd>${clientName}</dd>
+    <dt>Redirect</dt><dd>${escapeHtml(params.redirectUri)}</dd>
+    <dt>Scope</dt><dd>${escapeHtml(scope)}</dd>
+  </dl>
+  <div class="disclaimer">
+    <strong>Experimental connector.</strong> Provided by SENT Tech as-is, on an
+    experimental basis, without warranty of any kind. SENT Tech disclaims all
+    liability arising from the use of this solution. For official support,
+    contact <a href="mailto:admin@sent-tech.ca">admin@sent-tech.ca</a>.
+  </div>
+  <form method="post" action="/authorize">
+    <input type="hidden" name="response_type" value="code">
+    <input type="hidden" name="client_id" value="${escapeHtml(client.client_id)}">
+    <input type="hidden" name="redirect_uri" value="${escapeHtml(params.redirectUri)}">
+    <input type="hidden" name="code_challenge" value="${escapeHtml(params.codeChallenge)}">
+    <input type="hidden" name="code_challenge_method" value="S256">
+    <input type="hidden" name="scope" value="${escapeHtml(scope)}">
+    <input type="hidden" name="resource" value="${escapeHtml(resource)}">
+    ${params.state ? `<input type="hidden" name="state" value="${escapeHtml(params.state)}">` : ""}
+    <label for="cs">Consent secret <span class="hint">— operator only</span></label>
+    <input id="cs" name="consent_secret" type="password" autocomplete="current-password" autofocus>
+    <button type="submit">Authorize</button>
+  </form>
 </main>
 </body>
 </html>`;
