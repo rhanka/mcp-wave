@@ -72,7 +72,7 @@ describe("OAuth Hono MCP entrypoint", () => {
     });
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
-    expect(body["issuer"]).toBe("http://localhost:8080/");
+    expect(body["issuer"]).toBe("http://localhost:8080");
     expect(body["authorization_endpoint"]).toBe("http://localhost:8080/authorize");
     expect(body["token_endpoint"]).toBe("http://localhost:8080/token");
     expect(body["registration_endpoint"]).toBe("http://localhost:8080/register");
@@ -89,7 +89,7 @@ describe("OAuth Hono MCP entrypoint", () => {
       expect(res.status, path).toBe(200);
       const body = (await res.json()) as Record<string, unknown>;
       expect(body["resource"], path).toBe("http://localhost:8080/mcp");
-      expect(body["authorization_servers"], path).toEqual(["http://localhost:8080/"]);
+      expect(body["authorization_servers"], path).toEqual(["http://localhost:8080"]);
     }
   });
 

@@ -61,14 +61,33 @@ export function buildOAuthHonoApp(deps: OAuthHttpDeps): Hono {
   // form same-origin), so a global allowlist would 403 them — scope it to /mcp.
   app.use("*", rateLimit(deps.env.RATE_LIMIT_RPM));
 
+  // Access log (skip k8s probes) — surfaces the OAuth handler responses, which
+  // the @hono/mcp handlers do not log themselves.
+  app.use("*", async (c, next) => {
+    await next();
+    if (c.req.path !== "/healthz" && c.req.path !== "/readyz") {
+      deps.logger.info({ method: c.req.method, path: c.req.path, status: c.res.status }, "http");
+    }
+  });
+
   app.get("/healthz", (c) => c.json({ ok: true }));
 
   // Connector icon (Claude.ai fetches the origin favicon for the connector card).
   const faviconSvg =
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SENT Tech">' +
-    '<rect width="64" height="64" rx="12" fill="#0f172a"/>' +
-    '<path d="M18 20h28v7H35v17h-8V27h-9z" fill="#ffffff"/>' +
-    '<path d="M18 42h28v4H18z" fill="#2563eb"/></svg>';
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="-34 -34 297.49 297.49" role="img" aria-label="SENT Tech">' +
+    '<rect x="-34" y="-34" width="297.49" height="297.49" rx="48" fill="#ffffff"/>' +
+    '<g fill="#133d5e">' +
+    '<rect x="0" y="0" width="63.86" height="63.86" rx="9.82"/>' +
+    '<rect x="165.82" y="0" width="63.86" height="63.86" rx="9.82"/>' +
+    '<rect x="0" y="165.63" width="63.86" height="63.86" rx="9.82"/>' +
+    '<rect x="165.82" y="165.63" width="63.86" height="63.86" rx="9.82"/>' +
+    '<rect x="82.67" y="81.15" width="63.86" height="63.86" rx="14.74"/>' +
+    '<g opacity="0.6">' +
+    '<rect x="82.67" y="0" width="63.86" height="63.86" rx="31.93"/>' +
+    '<rect x="0" y="81.15" width="63.86" height="63.86" rx="31.93"/>' +
+    '<rect x="165.82" y="81.15" width="63.86" height="63.86" rx="31.93"/>' +
+    '<rect x="82.67" y="165.63" width="63.86" height="63.86" rx="31.93"/>' +
+    "</g></g></svg>";
   const serveFavicon = (c: Context) => {
     c.header("Content-Type", "image/svg+xml");
     c.header("Cache-Control", "public, max-age=86400");
