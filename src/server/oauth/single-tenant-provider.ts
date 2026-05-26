@@ -209,10 +209,20 @@ export class SingleTenantOAuthProvider {
 <body>
 <main class="card">
   <div class="head">
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SENT Tech">
-      <rect width="64" height="64" rx="12" fill="#0f172a"/>
-      <path d="M18 20h28v7H35v17h-8V27h-9z" fill="#ffffff"/>
-      <path d="M18 42h28v4H18z" fill="#2563eb"/>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 229.49 229.49" role="img" aria-label="SENT Tech">
+      <g fill="#133d5e">
+        <rect x="0" y="0" width="63.86" height="63.86" rx="9.82"/>
+        <rect x="165.82" y="0" width="63.86" height="63.86" rx="9.82"/>
+        <rect x="0" y="165.63" width="63.86" height="63.86" rx="9.82"/>
+        <rect x="165.82" y="165.63" width="63.86" height="63.86" rx="9.82"/>
+        <rect x="82.67" y="81.15" width="63.86" height="63.86" rx="14.74"/>
+        <g opacity="0.6">
+          <rect x="82.67" y="0" width="63.86" height="63.86" rx="31.93"/>
+          <rect x="0" y="81.15" width="63.86" height="63.86" rx="31.93"/>
+          <rect x="165.82" y="81.15" width="63.86" height="63.86" rx="31.93"/>
+          <rect x="82.67" y="165.63" width="63.86" height="63.86" rx="31.93"/>
+        </g>
+      </g>
     </svg>
     <div>
       <h1>Connect to Wave</h1>
@@ -388,11 +398,17 @@ export class SingleTenantOAuthProvider {
   }
 
   private normalizeResource(resource: URL | undefined): URL {
-    const resolved = resource ?? this.opts.resourceServerUrl;
-    if (resolved.href !== this.opts.resourceServerUrl.href) {
-      throw new InvalidTargetError("resource must match the MCP resource server URL");
+    const rs = this.opts.resourceServerUrl;
+    if (resource === undefined) return rs;
+    // Accept the canonical RS URL as well as the bare origin and trailing-slash
+    // variants — MCP clients (Claude.ai) advertise the resource indicator as
+    // either `https://host/mcp` or `https://host`. All normalize to the RS URL.
+    const path = resource.pathname.replace(/\/+$/, "");
+    const rsPath = rs.pathname.replace(/\/+$/, "");
+    if (resource.origin === rs.origin && (path === rsPath || path === "")) {
+      return rs;
     }
-    return resolved;
+    throw new InvalidTargetError("resource must match the MCP resource server URL");
   }
 }
 

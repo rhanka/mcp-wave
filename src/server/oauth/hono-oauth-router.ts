@@ -37,9 +37,15 @@ export function buildOAuthRoutes(
 
   const router = new Hono();
 
+  // RFC 8414: the issuer identifier must equal the value used to construct the
+  // metadata URL (served at the root well-known path), i.e. WITHOUT a trailing
+  // slash. Passing a string preserves it exactly (a URL object would normalize
+  // to `https://host/`, which clients like Claude.ai reject as a mismatch).
+  const issuer = oauth.issuerUrl.href.replace(/\/+$/, "");
+
   const oauthMetadata = createOAuthMetadata({
     provider: sdkProvider,
-    issuerUrl: oauth.issuerUrl,
+    issuerUrl: issuer,
     baseUrl: oauth.publicBaseUrl,
     scopesSupported: [OAUTH_SCOPE],
   });
@@ -62,7 +68,7 @@ export function buildOAuthRoutes(
   router.get("/.well-known/oauth-protected-resource", (c) =>
     c.json({
       resource: oauth.resourceServerUrl.href,
-      authorization_servers: [oauth.issuerUrl.href],
+      authorization_servers: [issuer],
       bearer_methods_supported: ["header"],
       scopes_supported: [OAUTH_SCOPE],
       resource_name: "mcp-wave",
