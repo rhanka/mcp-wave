@@ -5,9 +5,13 @@ RUN npm ci
 
 FROM deps AS build
 WORKDIR /app
-COPY tsconfig.json tsconfig.build.json ./
+COPY tsconfig.json tsconfig.build.json codegen.yml ./
+COPY scripts ./scripts
 COPY src ./src
 COPY data ./data
+# Regenerate the GraphQL SDK from the committed schema/operations — the output
+# src/wave/generated/sdk.ts is gitignored, so it must be produced in the build.
+RUN npm run codegen
 RUN npm run build
 RUN npm prune --omit=dev
 
