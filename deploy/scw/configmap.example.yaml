@@ -12,8 +12,8 @@ data:
   LOG_PII: "false"
   ALLOWED_ORIGINS: https://claude.ai,https://claude.com
   RATE_LIMIT_RPM: "60"
-  PUBLIC_BASE_URL: https://mcp-wave.example.invalid
-  OAUTH_ISSUER_URL: https://mcp-wave.example.invalid
+  PUBLIC_BASE_URL: https://mcp-wave.sent-tech.ca
+  OAUTH_ISSUER_URL: https://mcp-wave.sent-tech.ca
   OAUTH_STORE_PATH: /var/lib/mcp-wave/oauth-store.json
   OAUTH_ACCESS_TOKEN_TTL_SECONDS: "3600"
   OAUTH_REFRESH_TOKEN_TTL_SECONDS: "2592000"
