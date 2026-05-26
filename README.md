@@ -125,12 +125,14 @@ follow-up calls such as `tools/list`.
 ## OAuth Remote MCP Deploy
 
 The production remote MCP entrypoint is `src/entrypoints/oauth-http.ts`, a
-[Hono](https://hono.dev) app built on [`@sentropic/mcp-hono`](https://www.npmjs.com/package/@sentropic/mcp-hono).
-`@sentropic/mcp-hono` provides the OAuth **Resource Server** (bearer validation,
-protected-resource metadata, `WWW-Authenticate` challenge, MCP protocol
-negotiation and sessions) via a pluggable `validateToken`; the OAuth
-**Authorization Server** (single-tenant) is served by hand-written Hono routes
-over `SingleTenantOAuthProvider`. It exposes:
+[Hono](https://hono.dev) app built on [`@hono/mcp`](https://www.npmjs.com/package/@hono/mcp).
+`@hono/mcp` provides the Hono-native MCP `StreamableHTTPTransport` plus the OAuth
+toolkit on the standard MCP SDK `OAuthServerProvider`: `bearerAuth` (resource-server
+protection + `WWW-Authenticate`), dynamic client registration, token (PKCE) and
+revocation handlers, and well-known metadata. The MCP server itself is the SDK's
+`buildMcpServer` (faithful Zod→JSON-Schema). Only the consent-gated `/authorize`
+endpoint is custom (single-tenant operator consent), over `SingleTenantOAuthProvider`.
+It exposes:
 
 - OAuth authorization server metadata
 - OAuth protected resource metadata for `/mcp`
