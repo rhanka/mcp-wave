@@ -1,0 +1,57 @@
+name: deploy
+
+# Build the production image, push it to the Scaleway Container Registry, and
+# roll it out on the poc Kapsule cluster. This is the ONLY supported deploy path
+# (no manual rollouts). Secrets required (repo settings):
+#   SCW_REGISTRY_USER / SCW_REGISTRY_PASSWORD  - docker login to rg.fr-par.scw.cloud
+#   KUBE_CONFIG                                - base64 kubeconfig of the namespace-scoped
+#                                                mcp-wave-deployer ServiceAccount
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "data/**"
+      - "package.json"
+      - "package-lock.json"
+      - "Dockerfile"
+      - ".dockerignore"
+      - "deploy/scw/**"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: rg.fr-par.scw.cloud/mcp-wave/mcp-wave
+  NAMESPACE: mcp-wave
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to Scaleway Container Registry
+        run: |
+          echo "${{ secrets.SCW_REGISTRY_PASSWORD }}" \
+            | docker login rg.fr-par.scw.cloud -u "${{ secrets.SCW_REGISTRY_USER }}" --password-stdin
+
+      - name: Build and push image
+        run: |
+          TAG="${GITHUB_SHA::7}"
+          docker build -t "${IMAGE}:${TAG}" -t "${IMAGE}:latest" .
+          docker push "${IMAGE}:${TAG}"
+          docker push "${IMAGE}:latest"
+          echo "TAG=${TAG}" >> "${GITHUB_ENV}"
+
+      - uses: azure/setup-kubectl@v4
+
+      - name: Roll out
+        run: |
+          mkdir -p "${HOME}/.kube"
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > "${HOME}/.kube/config"
+          kubectl -n "${NAMESPACE}" set image deployment/mcp-wave "mcp-wave=${IMAGE}:${TAG}"
+          kubectl -n "${NAMESPACE}" rollout status deployment/mcp-wave --timeout=180s
