@@ -3,15 +3,19 @@ kind: Ingress
 metadata:
   name: mcp-wave
   annotations:
-    kubernetes.io/ingress.class: traefik
+    # cert-manager provisions the TLS secret via the shared ClusterIssuer
+    # (DNS-01 Cloudflare on sent-tech.ca). Matches the sentropic tenant.
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
 spec:
   ingressClassName: traefik
   tls:
     - hosts:
-        - mcp-wave.example.invalid
+        - mcp-wave.sent-tech.ca
       secretName: mcp-wave-tls
   rules:
-    - host: mcp-wave.example.invalid
+    - host: mcp-wave.sent-tech.ca
       http:
         paths:
           - path: /
