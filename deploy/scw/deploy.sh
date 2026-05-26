@@ -72,12 +72,13 @@ kubectl -n "${NAMESPACE}" create secret generic mcp-wave-secret \
   --from-literal=OAUTH_CONSENT_SECRET="${OAUTH_CONSENT_SECRET}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
-# --- Deploy via kustomize ---------------------------------------------------
+# --- Deploy via kustomize (kubectl's built-in; no standalone `kustomize` needed) ---
 echo "==> Applying manifests"
 WORK="$(mktemp -d)"
 trap 'rm -rf "${WORK}"' EXIT
 cp -R "${REPO_ROOT}/deploy/scw/." "${WORK}/"
-( cd "${WORK}" && kustomize edit set image "mcp-wave=${IMAGE}" && kubectl apply -k . )
+sed -i "s|newName: mcp-wave|newName: ${IMAGE%:*}|; s|newTag: local|newTag: ${IMAGE##*:}|" "${WORK}/kustomization.yaml"
+kubectl apply -k "${WORK}"
 kubectl -n "${NAMESPACE}" rollout status deployment/mcp-wave --timeout=180s
 
 # --- Smoke ------------------------------------------------------------------
