@@ -74,8 +74,7 @@ export function buildOAuthHonoApp(deps: OAuthHttpDeps): Hono {
 
   // Connector icon (Claude.ai fetches the origin favicon for the connector card).
   const faviconSvg =
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="-34 -34 297.49 297.49" role="img" aria-label="SENT Tech">' +
-    '<rect x="-34" y="-34" width="297.49" height="297.49" rx="48" fill="#ffffff"/>' +
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 229.49 229.49" role="img" aria-label="SENT Tech">' +
     '<g fill="#133d5e">' +
     '<rect x="0" y="0" width="63.86" height="63.86" rx="9.82"/>' +
     '<rect x="165.82" y="0" width="63.86" height="63.86" rx="9.82"/>' +
@@ -131,7 +130,7 @@ export function buildOAuthHonoApp(deps: OAuthHttpDeps): Hono {
 
   const sessions = new Map<string, McpSession>();
 
-  app.all("/mcp", originAllowlist(allowedOrigins), requireAuth, async (c) => {
+  const mcpHandler = async (c: Context) => {
     const requestId = randomUUID();
     const requestedSessionId = c.req.header("mcp-session-id");
     let session = requestedSessionId ? sessions.get(requestedSessionId) : undefined;
@@ -174,7 +173,13 @@ export function buildOAuthHonoApp(deps: OAuthHttpDeps): Hono {
     deps.logger.info({ request_id: requestId }, "mcp oauth http request");
     const res = await session.transport.handleRequest(c);
     return res ?? c.body(null, 202);
-  });
+  };
+
+  // Serve the MCP endpoint at both the dedicated /mcp path and the root, so the
+  // connector works whether it is registered as https://host or https://host/mcp
+  // (Claude.ai connects at the path the 401 came from).
+  app.all("/mcp", originAllowlist(allowedOrigins), requireAuth, mcpHandler);
+  app.all("/", originAllowlist(allowedOrigins), requireAuth, mcpHandler);
 
   return app;
 }

@@ -118,6 +118,21 @@ describe("OAuth Hono MCP entrypoint", () => {
     expect(wwwAuth).toContain("resource_metadata");
   });
 
+  it("also serves the MCP endpoint at the root path (unauth POST / → 401)", async () => {
+    const { app } = await appFor();
+    const res = await app.request("/", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        origin: "https://claude.ai",
+      },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
+    });
+    expect(res.status).toBe(401);
+    expect(res.headers.get("www-authenticate") ?? "").toContain("resource_metadata");
+  });
+
   it("full OAuth flow: register → authorize → token → MCP initialize with bearer → 200 with protocolVersion and Mcp-Session-Id", async () => {
     const { app } = await appFor();
 

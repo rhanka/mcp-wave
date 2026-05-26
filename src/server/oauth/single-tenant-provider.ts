@@ -180,7 +180,7 @@ export class SingleTenantOAuthProvider {
     border: 1px solid var(--border); border-radius: var(--radius);
     box-shadow: 0 1px 3px rgb(15 23 42 / 0.08); padding: 1.75rem; }
   .head { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem; }
-  .head svg { width: 40px; height: 40px; border-radius: 10px; flex: none; }
+  .head svg { width: 40px; height: 40px; flex: none; }
   .head h1 { font-size: 1.125rem; margin: 0; }
   .head p { margin: 0; font-size: 0.8125rem; color: var(--muted); }
   .lead { font-size: 0.9375rem; color: var(--muted); margin: 0 0 1.25rem; }
