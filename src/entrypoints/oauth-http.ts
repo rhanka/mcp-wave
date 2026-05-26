@@ -4,7 +4,7 @@ import { StreamableHTTPTransport } from "@hono/mcp";
 import { bearerAuth } from "@hono/mcp/auth";
 import { serve } from "@hono/node-server";
 import { GraphQLClient } from "graphql-request";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { type AppEnv, parseEnv } from "../config/env.js";
 import { createLogger } from "../config/logger.js";
 import { AccountMappingLoader } from "../domain/tax/account-mapping-loader.js";
@@ -55,10 +55,27 @@ export function buildOAuthHonoApp(deps: OAuthHttpDeps): Hono {
   const app = new Hono();
   const allowedOrigins = deps.env.ALLOWED_ORIGINS.split(",").map((s) => s.trim());
 
-  app.use("*", originAllowlist(allowedOrigins));
+  // Origin allowlist guards ONLY the MCP JSON-RPC endpoint (DNS-rebinding
+  // protection for the browser-called /mcp). The OAuth endpoints are part of a
+  // browser-driven flow (the operator opens /authorize and submits the consent
+  // form same-origin), so a global allowlist would 403 them — scope it to /mcp.
   app.use("*", rateLimit(deps.env.RATE_LIMIT_RPM));
 
   app.get("/healthz", (c) => c.json({ ok: true }));
+
+  // Connector icon (Claude.ai fetches the origin favicon for the connector card).
+  const faviconSvg =
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SENT Tech">' +
+    '<rect width="64" height="64" rx="12" fill="#0f172a"/>' +
+    '<path d="M18 20h28v7H35v17h-8V27h-9z" fill="#ffffff"/>' +
+    '<path d="M18 42h28v4H18z" fill="#2563eb"/></svg>';
+  const serveFavicon = (c: Context) => {
+    c.header("Content-Type", "image/svg+xml");
+    c.header("Cache-Control", "public, max-age=86400");
+    return c.body(faviconSvg);
+  };
+  app.get("/favicon.svg", serveFavicon);
+  app.get("/favicon.ico", serveFavicon);
 
   app.get("/readyz", async (c) => {
     const issues: string[] = [];
@@ -95,7 +112,7 @@ export function buildOAuthHonoApp(deps: OAuthHttpDeps): Hono {
 
   const sessions = new Map<string, McpSession>();
 
-  app.all("/mcp", requireAuth, async (c) => {
+  app.all("/mcp", originAllowlist(allowedOrigins), requireAuth, async (c) => {
     const requestId = randomUUID();
     const requestedSessionId = c.req.header("mcp-session-id");
     let session = requestedSessionId ? sessions.get(requestedSessionId) : undefined;
