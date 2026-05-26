@@ -173,22 +173,27 @@ limits, useful for daily bookkeeping, and safe to operate.
 - Claude.ai can complete an OAuth-backed remote MCP connection against the
   deployed endpoint
 
-### WP-OPS-02 - Hono / mcp-hono runtime migration `[done]`
+### WP-OPS-02 - Hono runtime migration (@hono/mcp) `[done]`
 
 **Context**
 - WP-OPS-01 shipped the OAuth remote MCP entrypoint on Express because the MCP
-  SDK OAuth helpers are Express-only. This WP migrates the runtime to Hono using
-  the in-house `@sentropic/mcp-hono` framework, removing the Express dependency.
+  SDK OAuth helpers are Express-only. This WP migrates the runtime to Hono.
+- First attempt rebuilt the MCP server in-house (`@sentropic/mcp-hono`); then we
+  found [`@hono/mcp`](https://www.npmjs.com/package/@hono/mcp), the off-the-shelf
+  Hono MCP middleware (transport + OAuth toolkit on the SDK `OAuthServerProvider`),
+  and adopted it instead — dropping the in-house framework and the hand-rolled
+  OAuth router.
 
 **Outcome**
-- `@sentropic/mcp-hono` supplies the OAuth Resource Server (pluggable
-  `validateToken`); the single-tenant Authorization Server is hand-written Hono
-  routes over `SingleTenantOAuthProvider`.
-- All 26 tools bridged onto the mcp-hono `.tool()` API via the existing
-  `error-bridge`; Express (`express`, `express-rate-limit`, `cors`, `supertest`)
-  removed from direct dependencies.
+- `@hono/mcp` provides the `StreamableHTTPTransport` + `bearerAuth` (RS), and the
+  DCR / token (PKCE) / revoke / well-known handlers on the SDK provider. The MCP
+  server is the SDK's `buildMcpServer` (faithful Zod schemas). Only the
+  consent-gated `/authorize` is custom, over `SingleTenantOAuthProvider`.
+- Removed `@sentropic/mcp-hono`, the hand-rolled `hono-oauth-router` handlers, and
+  `token-verifier`; Express (`express`, `express-rate-limit`, `cors`, `supertest`)
+  already gone. Added `@hono/mcp` + `hono-rate-limiter` to dependencies.
 - Supersedes the WP-OPS-01 Express runtime; `deploy/scw` and the Docker image are
-  unchanged (still run `dist/entrypoints/oauth-http.js`).
+  unchanged (still run `dist/entrypoints/oauth-http.js`). Prod image smoke-validated.
 
 **Implementation plan**
 - `docs/superpowers/plans/2026-05-25-wp-ops-02-mcp-hono-migration.md`

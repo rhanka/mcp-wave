@@ -1,22 +1,21 @@
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
+import { StreamableHTTPTransport } from "@hono/mcp";
+import { bearerAuth } from "@hono/mcp/auth";
 import { serve } from "@hono/node-server";
-import { getOAuthContext, mcp } from "@sentropic/mcp-hono";
 import { GraphQLClient } from "graphql-request";
 import { Hono } from "hono";
-import type { z } from "zod";
 import { type AppEnv, parseEnv } from "../config/env.js";
 import { createLogger } from "../config/logger.js";
 import { AccountMappingLoader } from "../domain/tax/account-mapping-loader.js";
 import { TaxRatesLoader } from "../domain/tax/rates-loader.js";
-import { toMcpResult } from "../server/error-bridge.js";
 import { originAllowlist } from "../server/http/origin-allowlist.js";
 import { rateLimit } from "../server/http/rate-limit.js";
+import { buildMcpServer } from "../server/mcp-server.js";
 import { OAUTH_SCOPE, oauthConfigFromEnv } from "../server/oauth/config.js";
 import { FileOAuthStore } from "../server/oauth/file-store.js";
-import { buildOAuthAsRouter } from "../server/oauth/hono-oauth-router.js";
+import { buildOAuthRoutes } from "../server/oauth/hono-oauth-router.js";
 import { SingleTenantOAuthProvider } from "../server/oauth/single-tenant-provider.js";
-import { makeValidateToken } from "../server/oauth/token-verifier.js";
 import type { ToolContext } from "../server/tool-context.js";
 import { allTools } from "../server/tool-registry.js";
 import type { WaveCredentialProvider } from "../wave/auth/provider.js";
@@ -31,6 +30,10 @@ export interface OAuthHttpDeps {
   wave: WaveClient;
   taxRates: TaxRatesLoader;
   accountMapping: AccountMappingLoader;
+}
+
+interface McpSession {
+  transport: StreamableHTTPTransport;
 }
 
 export function buildOAuthHonoApp(deps: OAuthHttpDeps): Hono {
@@ -74,61 +77,51 @@ export function buildOAuthHonoApp(deps: OAuthHttpDeps): Hono {
     return c.json({ ok: true });
   });
 
-  // Mount Authorization Server routes at root
-  app.route("/", buildOAuthAsRouter(oauthProvider, oauth, deps.env.NODE_ENV));
+  // OAuth authorization-server + protected-resource routes (mounted at root).
+  app.route("/", buildOAuthRoutes(oauthProvider, oauth, deps.env.NODE_ENV));
 
-  // Serve Protected Resource Metadata at the root-level well-known path.
-  //
-  // The mcp-hono lib mounts its own PRM handler at
-  //   /.well-known/oauth-protected-resource
-  // relative to the McpHono mount point (i.e. /mcp/.well-known/oauth-protected-resource).
-  // Our resourceMetadataUrl is http://host/.well-known/oauth-protected-resource/mcp
-  // (a different root-level path), so the lib does NOT serve it automatically.
-  // We add this route manually so the URL advertised in WWW-Authenticate resolves.
-  app.get("/.well-known/oauth-protected-resource/mcp", (c) => {
-    const body: Record<string, unknown> = {
-      resource: oauth.resourceServerUrl.href,
-      authorization_servers: [oauth.issuerUrl.href],
-      bearer_methods_supported: ["header"],
-      scopes_supported: [OAUTH_SCOPE],
-    };
-    return c.json(body);
-  });
-
-  // Build MCP server with OAuth protection.
-  //
-  // Note: mcp-hono validates tool arguments against the Zod schema BEFORE calling
-  // the handler, returning a JSON-RPC -32602 INVALID_PARAMS error on failure.
-  // This differs from our error-bridge INVALID_INPUT envelope. This is an accepted
-  // behavior change; we do not double-validate here.
-  const server = mcp({
-    name: "mcp-wave",
-    version: "0.1.0",
-    oauth: {
-      issuer: oauth.issuerUrl.href,
-      authorizationServers: [oauth.issuerUrl.href],
-      resource: oauth.resourceServerUrl.href,
-      resourceMetadataUrl: oauth.resourceMetadataUrl,
-      requiredScopes: [OAUTH_SCOPE],
-      scopesSupported: [OAUTH_SCOPE],
-      validateToken: makeValidateToken(oauthProvider, oauth.issuerUrl.href),
+  // Bearer auth for /mcp: validates the access token (and scope) via the provider.
+  // @hono/mcp's bearerAuth emits 401 + WWW-Authenticate with resource_metadata.
+  const requireAuth = bearerAuth({
+    verifyToken: async (token: string): Promise<boolean> => {
+      try {
+        const info = await oauthProvider.verifyAccessToken(token);
+        return info.scopes.includes(OAUTH_SCOPE);
+      } catch {
+        return false;
+      }
     },
   });
 
-  for (const tool of allTools()) {
-    server.tool({
-      name: tool.name,
-      description: tool.description,
-      schema: tool.inputSchema as unknown as z.ZodObject<z.ZodRawShape>,
-      handler: (args, c) => {
-        const requestId = randomUUID();
-        const octx = getOAuthContext(c);
-        const identity =
-          "oauth:" +
-          (octx?.subject ?? "unknown") +
-          ":" +
-          String(octx?.claims?.["tokenHashPrefix"] ?? "unknown");
-        const ctx: ToolContext = {
+  const sessions = new Map<string, McpSession>();
+
+  app.all("/mcp", requireAuth, async (c) => {
+    const requestId = randomUUID();
+    const requestedSessionId = c.req.header("mcp-session-id");
+    let session = requestedSessionId ? sessions.get(requestedSessionId) : undefined;
+
+    if (!session) {
+      // requireAuth guarantees a valid bearer token; re-read it for identity.
+      const token = (c.req.header("authorization") ?? "").replace(/^Bearer\s+/i, "");
+      const authInfo = await oauthProvider.verifyAccessToken(token);
+      const identity = `oauth:${authInfo.clientId}:${String(authInfo.extra?.["tokenHashPrefix"] ?? "unknown")}`;
+
+      let created: McpSession | undefined;
+      const transport = new StreamableHTTPTransport({
+        enableJsonResponse: true,
+        sessionIdGenerator: () => randomUUID(),
+        onsessioninitialized: (sessionId) => {
+          if (created) sessions.set(sessionId, created);
+        },
+        onsessionclosed: (sessionId) => {
+          sessions.delete(sessionId);
+        },
+      });
+      created = { transport };
+
+      const { server } = buildMcpServer({
+        tools: allTools(),
+        makeCtx: (): ToolContext => ({
           req: { headers: c.req.raw.headers, request_id: requestId },
           wave: deps.wave,
           taxRates: deps.taxRates,
@@ -136,13 +129,16 @@ export function buildOAuthHonoApp(deps: OAuthHttpDeps): Hono {
           env: deps.env,
           logger: deps.logger.child({ request_id: requestId }),
           identity,
-        };
-        return toMcpResult(tool)(args, ctx);
-      },
-    });
-  }
+        }),
+      });
+      await server.connect(transport);
+      session = created;
+    }
 
-  app.route("/mcp", server);
+    deps.logger.info({ request_id: requestId }, "mcp oauth http request");
+    const res = await session.transport.handleRequest(c);
+    return res ?? c.body(null, 202);
+  });
 
   return app;
 }

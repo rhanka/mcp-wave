@@ -79,15 +79,18 @@ describe("OAuth Hono MCP entrypoint", () => {
     expect(body["revocation_endpoint"]).toBe("http://localhost:8080/revoke");
   });
 
-  it("serves protected-resource metadata at /.well-known/oauth-protected-resource/mcp", async () => {
+  it("serves protected-resource metadata at both well-known paths (suffixed + the one the 401 advertises)", async () => {
     const { app } = await appFor();
-    const res = await app.request("/.well-known/oauth-protected-resource/mcp", {
-      headers: { origin: "https://claude.ai" },
-    });
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as Record<string, unknown>;
-    expect(body["resource"]).toBe("http://localhost:8080/mcp");
-    expect(body["authorization_servers"]).toEqual(["http://localhost:8080/"]);
+    for (const path of [
+      "/.well-known/oauth-protected-resource/mcp",
+      "/.well-known/oauth-protected-resource",
+    ]) {
+      const res = await app.request(path, { headers: { origin: "https://claude.ai" } });
+      expect(res.status, path).toBe(200);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body["resource"], path).toBe("http://localhost:8080/mcp");
+      expect(body["authorization_servers"], path).toEqual(["http://localhost:8080/"]);
+    }
   });
 
   it("rejects unauthenticated POST /mcp initialize with 401 and WWW-Authenticate containing resource_metadata", async () => {
@@ -189,10 +192,8 @@ describe("OAuth Hono MCP entrypoint", () => {
     expect(tokens.access_token).toBeTruthy();
     expect(tokens.refresh_token).toBeTruthy();
 
-    // Step 5: POST /mcp initialize with bearer token
-    // We pass an Mcp-Session-Id header so the lib echoes it back (the lib only
-    // sets the response header when a session-id is present in the request).
-    const sessionId = "test-session-id-001";
+    // Step 5: POST /mcp initialize with bearer token. The transport assigns the
+    // session id and returns it in the Mcp-Session-Id response header.
     const initRes = await app.request("/mcp", {
       method: "POST",
       headers: {
@@ -200,7 +201,6 @@ describe("OAuth Hono MCP entrypoint", () => {
         accept: "application/json, text/event-stream",
         authorization: `Bearer ${tokens.access_token}`,
         origin: "https://claude.ai",
-        "mcp-session-id": sessionId,
       },
       body: JSON.stringify({
         jsonrpc: "2.0",
@@ -276,15 +276,36 @@ describe("OAuth Hono MCP entrypoint", () => {
     });
     const tokens2 = (await tokenRes.json()) as { access_token: string };
 
-    // tools/list
+    const mcpHeaders = {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+      authorization: `Bearer ${tokens2.access_token}`,
+      origin: "https://claude.ai",
+    };
+
+    // initialize first to establish the MCP session, then reuse its id
+    const initRes = await app.request("/mcp", {
+      method: "POST",
+      headers: mcpHeaders,
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-03-26",
+          capabilities: {},
+          clientInfo: { name: "test", version: "0" },
+        },
+      }),
+    });
+    expect(initRes.status).toBe(200);
+    const sessionId = initRes.headers.get("mcp-session-id") ?? "";
+    expect(sessionId).toBeTruthy();
+
+    // tools/list within the session
     const listRes = await app.request("/mcp", {
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json",
-        authorization: `Bearer ${tokens2.access_token}`,
-        origin: "https://claude.ai",
-      },
+      headers: { ...mcpHeaders, "mcp-session-id": sessionId },
       body: JSON.stringify({
         jsonrpc: "2.0",
         id: 2,
