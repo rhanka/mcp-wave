@@ -145,6 +145,9 @@ export class WaveClient {
   invoicePaymentReceiptSend(req: RequestContext, vars: SdkArgs<"InvoicePaymentReceiptSend">) {
     return this.call(req, "InvoicePaymentReceiptSend", vars);
   }
+  invoiceApprove(req: RequestContext, vars: SdkArgs<"InvoiceApprove">) {
+    return this.call(req, "InvoiceApprove", vars);
+  }
   customerCreate(req: RequestContext, vars: SdkArgs<"CustomerCreate">) {
     return this.call(req, "CustomerCreate", vars);
   }

@@ -302,6 +302,21 @@ mutation InvoicePaymentReceiptSend($input: InvoicePaymentReceiptSendInput!) {
   }
 }
 
+mutation InvoiceApprove($input: InvoiceApproveInput!) {
+  invoiceApprove(input: $input) {
+    didSucceed
+    inputErrors {
+      code
+      message
+      path
+    }
+    invoice {
+      id
+      status
+    }
+  }
+}
+
 query ListSalesTaxes($businessId: ID!) {
   business(id: $businessId) {
     salesTaxes {

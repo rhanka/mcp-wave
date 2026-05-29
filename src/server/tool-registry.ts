@@ -4,6 +4,7 @@ import { listBusinessesTool } from "../tools/businesses/list-businesses.js";
 import { createCustomerTool } from "../tools/customers/create-customer.js";
 import { getCustomerTool } from "../tools/customers/get-customer.js";
 import { listCustomersTool } from "../tools/customers/list-customers.js";
+import { approveInvoiceTool } from "../tools/invoices/approve-invoice.js";
 import { createInvoiceTool } from "../tools/invoices/create-invoice.js";
 import { deleteInvoiceTool } from "../tools/invoices/delete-invoice.js";
 import { deleteInvoicePaymentTool } from "../tools/invoices/delete-invoice-payment.js";
@@ -42,6 +43,7 @@ const TOOLS: RegisteredTool[] = [
   listClientProfilesTool,
   getPayrollRatesTool,
   // Write tools (Phase B.1)
+  approveInvoiceTool,
   createInvoiceTool,
   sendInvoiceTool,
   markInvoicePaidTool,
