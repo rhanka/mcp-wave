@@ -9,6 +9,7 @@ describe("tool registry v1 catalog", () => {
 
     expect(names).toEqual(
       [
+        "analyze_transactions_csv",
         "approve_invoice",
         "audit_account_mapping",
         "create_customer",
