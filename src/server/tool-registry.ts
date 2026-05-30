@@ -20,6 +20,7 @@ import { listProductsTool } from "../tools/products/list-products.js";
 import { upsertProductTool } from "../tools/products/upsert-product.js";
 import { listClientProfilesTool } from "../tools/profiles/list-client-profiles.js";
 import { getPayrollRatesTool } from "../tools/tax/get-payroll-rates.js";
+import { splitTransactionTool } from "../tools/transactions/split-transaction.js";
 import { listVendorsTool } from "../tools/vendors/list-vendors.js";
 import { auditAccountMappingTool } from "../tools/workflows/audit-account-mapping.js";
 import { createInvoiceForClientTool } from "../tools/workflows/create-invoice-for-client.js";
@@ -58,6 +59,8 @@ const TOOLS: RegisteredTool[] = [
   auditAccountMappingTool,
   setupAccountMappingTool,
   splitPayrollRemittanceTool,
+  // Transaction tools (Phase B.4)
+  splitTransactionTool,
 ];
 
 export function allTools(): readonly RegisteredTool[] {

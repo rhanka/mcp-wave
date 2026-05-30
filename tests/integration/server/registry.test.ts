@@ -9,10 +9,11 @@ describe("tool registry v1 catalog", () => {
 
     expect(names).toEqual(
       [
+        "approve_invoice",
+        "audit_account_mapping",
         "create_customer",
         "create_invoice",
         "create_invoice_for_client",
-        "audit_account_mapping",
         "delete_invoice",
         "delete_invoice_payment",
         "download_invoice_pdf",
@@ -33,6 +34,7 @@ describe("tool registry v1 catalog", () => {
         "send_invoice_payment_receipt",
         "setup_account_mapping",
         "split_payroll_remittance",
+        "split_transaction",
         "update_invoice_payment",
         "upsert_product",
       ].sort(),
