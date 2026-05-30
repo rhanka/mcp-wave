@@ -167,6 +167,18 @@ export function buildOAuthHonoApp(deps: OAuthHttpDeps): Hono {
         }),
       });
       await server.connect(transport);
+      // Notify the client that the tools list may have changed since the last
+      // session. Fires once per new session so clients that support
+      // notifications/tools/list_changed (e.g. Claude.ai) re-fetch tools after
+      // a deploy adds new tools, without requiring a disconnect/reconnect.
+      try {
+        await server.sendToolListChanged();
+      } catch (e) {
+        deps.logger.warn(
+          { err: e instanceof Error ? e.message : String(e) },
+          "failed to send tools/list_changed",
+        );
+      }
       session = created;
     }
 
