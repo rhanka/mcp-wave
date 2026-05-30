@@ -18,7 +18,7 @@ export interface BuildOptions {
 export function buildMcpServer(opts: BuildOptions): { server: Server } {
   const server = new Server(
     { name: "mcp-wave", version: "0.1.0" },
-    { capabilities: { tools: {} } },
+    { capabilities: { tools: { listChanged: true } } },
   );
 
   const announcedTools = opts.tools.map((t) => ({
