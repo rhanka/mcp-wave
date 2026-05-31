@@ -3,12 +3,18 @@ import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { ToolError } from "../../lib/errors.js";
 import { defineTool } from "../../server/define-tool.js";
+import type { ToolContext } from "../../server/tool-context.js";
 
 interface PatternRule {
   pattern: string;
   code: string;
   label: string;
   confidence: "high" | "medium" | "low";
+  /**
+   * Optional Wave account name to resolve into an account id at analysis time.
+   * Matched case-insensitively against `Account.name`.
+   */
+  waveAccountName?: string;
   // Resolved at load-time:
   regex?: RegExp;
 }
@@ -171,6 +177,8 @@ function parseAmount(raw: string | undefined): number | null {
 
 interface CategorizeResult {
   proposedCategoryAccount: string | null;
+  /** Wave account id resolved from the seed `waveAccountName`. Null when not resolvable. */
+  proposedWaveAccountId: string | null;
   confidence: "high" | "medium" | "low" | "none";
   reasoning: string;
 }
@@ -179,6 +187,7 @@ function categorize(
   description: string,
   currentCategory: string | undefined,
   patterns: PatternRule[],
+  accountsByName: Map<string, string> | null,
 ): CategorizeResult {
   // If the row already has a non-empty category, treat as the strongest signal.
   if (
@@ -186,27 +195,72 @@ function categorize(
     currentCategory.trim() !== "" &&
     currentCategory.toLowerCase() !== "uncategorized"
   ) {
+    const trimmed = currentCategory.trim();
+    // Best-effort resolve the CSV category against Wave accounts.
+    const resolved = accountsByName?.get(trimmed.toLowerCase()) ?? null;
     return {
-      proposedCategoryAccount: currentCategory.trim(),
+      proposedCategoryAccount: trimmed,
+      proposedWaveAccountId: resolved,
       confidence: "high",
-      reasoning: `Row already categorized in source CSV as "${currentCategory.trim()}".`,
+      reasoning: resolved
+        ? `Row already categorized in source CSV as "${trimmed}" (matched Wave account ${resolved}).`
+        : `Row already categorized in source CSV as "${trimmed}".`,
     };
   }
   for (const rule of patterns) {
     if (rule.regex?.test(description)) {
+      const seedName = rule.waveAccountName;
+      let resolved: string | null = null;
+      let reasoning = `Matched pattern ${rule.code} (${rule.label}).`;
+      if (seedName === undefined) {
+        reasoning += ` Seed has no waveAccountName — proposedWaveAccountId is null. Add "waveAccountName" to this seed entry to enable Wave account resolution.`;
+      } else if (accountsByName === null) {
+        reasoning += ` Wave accounts not fetched — proposedWaveAccountId is null.`;
+      } else {
+        const hit = accountsByName.get(seedName.toLowerCase());
+        if (hit) {
+          resolved = hit;
+          reasoning += ` Resolved seed waveAccountName "${seedName}" to Wave account ${hit}.`;
+        } else {
+          reasoning += ` Seed waveAccountName "${seedName}" did not match any Wave account on this business.`;
+        }
+      }
       return {
         proposedCategoryAccount: rule.code,
+        proposedWaveAccountId: resolved,
         confidence: rule.confidence,
-        reasoning: `Matched pattern ${rule.code} (${rule.label}).`,
+        reasoning,
       };
     }
   }
   return {
     proposedCategoryAccount: null,
+    proposedWaveAccountId: null,
     confidence: "none",
     reasoning:
       "No pattern matched. Add a rule to data/transaction-mapping/CA-QC.json or categorize manually.",
   };
+}
+
+/**
+ * Fetch the business' Wave accounts and index them by lowercased name.
+ * Memoized once per tool call by the caller.
+ */
+async function fetchAccountsByName(
+  ctx: ToolContext,
+  businessId: string,
+): Promise<Map<string, string>> {
+  const res = await ctx.wave.listAccounts(ctx.req, { businessId });
+  if (!res.business) {
+    throw new ToolError("BUSINESS_NOT_FOUND", { business_id: businessId });
+  }
+  const map = new Map<string, string>();
+  for (const edge of res.business.accounts?.edges ?? []) {
+    const node = edge.node;
+    if (!node) continue;
+    map.set(node.name.toLowerCase(), node.id);
+  }
+  return map;
 }
 
 // ----- Tool definition -----
@@ -220,7 +274,7 @@ export const analyzeTransactionsCsvTool = defineTool({
     businessId: z.string().min(1),
     defaultAnchorAccountId: z.string().min(1).optional(),
   }),
-  async execute(input, _ctx) {
+  async execute(input, ctx) {
     const rows = parseCsv(input.csv);
     if (rows.length < 2) {
       throw new ToolError(
@@ -260,6 +314,18 @@ export const analyzeTransactionsCsvTool = defineTool({
     }
 
     const patterns = await loadPatterns();
+
+    // Memoized fetch of Wave accounts. One fetch per tool call max, regardless
+    // of how many rows reference an account name.
+    const accountsCache = new Map<string, Map<string, string>>();
+    async function getAccounts(businessId: string): Promise<Map<string, string>> {
+      const hit = accountsCache.get(businessId);
+      if (hit) return hit;
+      const fetched = await fetchAccountsByName(ctx, businessId);
+      accountsCache.set(businessId, fetched);
+      return fetched;
+    }
+
     const proposals: Array<{
       rowIndex: number;
       date: string;
@@ -267,6 +333,7 @@ export const analyzeTransactionsCsvTool = defineTool({
       description: string;
       anchorAccount: string;
       proposedCategoryAccount: string | null;
+      proposedWaveAccountId: string | null;
       confidence: "high" | "medium" | "low" | "none";
       reasoning: string;
     }> = [];
@@ -300,7 +367,8 @@ export const analyzeTransactionsCsvTool = defineTool({
         "";
 
       const currentCategory = cols.category !== undefined ? row[cols.category] : undefined;
-      const cat = categorize(description, currentCategory, patterns);
+      const accountsByName = await getAccounts(input.businessId);
+      const cat = categorize(description, currentCategory, patterns, accountsByName);
 
       proposals.push({
         rowIndex: r,
@@ -309,6 +377,7 @@ export const analyzeTransactionsCsvTool = defineTool({
         description,
         anchorAccount,
         proposedCategoryAccount: cat.proposedCategoryAccount,
+        proposedWaveAccountId: cat.proposedWaveAccountId,
         confidence: cat.confidence,
         reasoning: cat.reasoning,
       });

@@ -1,62 +1,72 @@
 {
-  "_comment": "Seed heuristic patterns for analyze_transactions_csv. Maps regex (case-insensitive, tested against description) to a chart-of-accounts code/label and a recommended Wave account_id. Replace account_id values with real Wave IDs from list_accounts. The 'code' is a stable identifier the user can grep for; 'confidence' is a default suggestion the tool may downgrade based on row data.",
+  "_comment": "Seed heuristic patterns for analyze_transactions_csv. Maps regex (case-insensitive, tested against description) to a chart-of-accounts code/label. Optional `waveAccountName` is matched case-insensitively against Wave Account.name to resolve a real Wave account id at analysis time.",
   "jurisdiction": "CA-QC",
   "patterns": [
     {
       "pattern": "(?i)\\b(iga|metro|provigo|maxi|loblaws|super[ -]?c|costco|walmart\\s*grocer|bulk\\s*barn)\\b",
       "code": "6300_GROCERIES",
       "label": "Groceries",
-      "confidence": "high"
+      "confidence": "high",
+      "waveAccountName": "Groceries"
     },
     {
       "pattern": "(?i)\\b(petro[- ]?can(?:ada)?|shell|esso|ultramar|irving|chevron|mobil|gas\\s*plus|station[- ]?service)\\b",
       "code": "6400_FUEL_VEHICLE",
       "label": "Fuel / Vehicle",
-      "confidence": "high"
+      "confidence": "high",
+      "waveAccountName": "Vehicle Expense - Fuel"
     },
     {
       "pattern": "(?i)\\b(hydro\\s*qu[ée]bec|videotron|bell\\s*canada|telus|rogers|fizz|fido|koodo|energir)\\b",
       "code": "6500_UTILITIES",
       "label": "Utilities / Telecom",
-      "confidence": "high"
+      "confidence": "high",
+      "waveAccountName": "Utilities"
     },
     {
       "pattern": "(?i)\\b(stm|exo|opus|amt|via\\s*rail|uber|lyft|taxi|coop\\s*tax)\\b",
       "code": "6420_TRANSPORT",
       "label": "Public transport / Rideshare",
-      "confidence": "medium"
+      "confidence": "medium",
+      "waveAccountName": "Travel"
     },
     {
       "pattern": "(?i)\\b(amazon|amzn|ebay|aliexpress|best\\s*buy|canadian\\s*tire|home\\s*depot|rona)\\b",
       "code": "6600_OFFICE_SUPPLIES",
       "label": "Office / Supplies (review)",
-      "confidence": "low"
+      "confidence": "low",
+      "waveAccountName": "Office Supplies"
     },
     {
       "pattern": "(?i)\\b(starbucks|tim\\s*hortons|second\\s*cup|mcdonald|a&w|subway|restaurant|caf[ée]|pizz|sushi)\\b",
       "code": "6700_MEALS_ENTERTAINMENT",
       "label": "Meals & Entertainment",
-      "confidence": "medium"
+      "confidence": "medium",
+      "waveAccountName": "Meals and Entertainment"
     },
     {
       "pattern": "(?i)\\b(aws|amazon\\s*web\\s*services|google\\s*cloud|gcp|microsoft\\s*azure|github|gitlab|cloudflare|vercel|netlify|digitalocean|linode)\\b",
       "code": "6810_SAAS_HOSTING",
       "label": "SaaS / Hosting",
-      "confidence": "high"
+      "confidence": "high",
+      "waveAccountName": "Dues and Subscriptions"
     },
     {
       "pattern": "(?i)\\b(stripe|square|paypal|wise|interac|virement)\\b",
       "code": "6820_PAYMENT_PROCESSING",
       "label": "Payment processing (review)",
-      "confidence": "low"
+      "confidence": "low",
+      "waveAccountName": "Merchant Account Fees"
     },
     {
       "pattern": "(?i)\\b(insurance|assurance|intact|desjardins\\s*assurance|la\\s*capitale|industrielle)\\b",
       "code": "6900_INSURANCE",
       "label": "Insurance",
-      "confidence": "medium"
+      "confidence": "medium",
+      "waveAccountName": "Insurance"
     },
     {
+      "_comment": "No waveAccountName — payroll typically posts to several accounts (wages, benefits, deductions). Resolve manually after split.",
       "pattern": "(?i)\\b(salaire|paie|payroll|wagepoint|adp|nethris|wave\\s*payroll)\\b",
       "code": "7000_PAYROLL",
       "label": "Payroll",
