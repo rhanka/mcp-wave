@@ -158,9 +158,178 @@ describe("split_transaction tool", () => {
     expect(vars.input.lineItems[0]?.taxes).toEqual([{ salesTaxId: "tax_tps_tvq", amount: "10" }]);
   });
 
-  it("throws SALES_TAX_AMOUNT_REQUIRED when a tax entry omits amount", async () => {
-    const moneyTransactionCreate = vi.fn();
+  it("caller provides amount → passes through unchanged, no salesTaxes fetch", async () => {
+    const moneyTransactionCreate = vi.fn().mockResolvedValue({
+      moneyTransactionCreate: {
+        didSucceed: true,
+        inputErrors: [],
+        transaction: { id: "txn_passthrough" },
+      },
+    });
+    const listSalesTaxes = vi.fn();
     const ctx = makeCtx(moneyTransactionCreate);
+    (ctx.wave as unknown as { listSalesTaxes: typeof listSalesTaxes }).listSalesTaxes =
+      listSalesTaxes;
+
+    await splitTransactionTool.handler(
+      {
+        anchor: { ...VALID_ANCHOR, totalAmount: -100 },
+        lines: [
+          {
+            accountId: "acct_expense",
+            amount: 90,
+            salesTaxes: [{ salesTaxId: "tax_tps_tvq", amount: 10 }],
+          },
+        ],
+      },
+      ctx,
+    );
+
+    expect(listSalesTaxes).not.toHaveBeenCalled();
+    const [, vars] = moneyTransactionCreate.mock.calls[0] as [
+      unknown,
+      { input: { lineItems: Array<{ taxes?: Array<Record<string, unknown>> }> } },
+    ];
+    expect(vars.input.lineItems[0]?.taxes).toEqual([{ salesTaxId: "tax_tps_tvq", amount: "10" }]);
+  });
+
+  it("caller omits amount → fetches taxes and sends computed tax-exclusive amount", async () => {
+    const moneyTransactionCreate = vi.fn().mockResolvedValue({
+      moneyTransactionCreate: {
+        didSucceed: true,
+        inputErrors: [],
+        transaction: { id: "txn_autocomp" },
+      },
+    });
+    // 5% rate stored as decimal 0.05; line=100 (pre-tax) → tax=5.00
+    const listSalesTaxes = vi.fn().mockResolvedValue({
+      business: {
+        salesTaxes: {
+          edges: [{ node: { id: "tax_gst", name: "GST", abbreviation: "GST", rate: "0.05" } }],
+        },
+      },
+    });
+    const ctx = makeCtx(moneyTransactionCreate);
+    (ctx.wave as unknown as { listSalesTaxes: typeof listSalesTaxes }).listSalesTaxes =
+      listSalesTaxes;
+
+    await splitTransactionTool.handler(
+      {
+        anchor: { ...VALID_ANCHOR, totalAmount: -105 },
+        lines: [
+          {
+            accountId: "acct_expense",
+            amount: 100,
+            salesTaxes: [{ salesTaxId: "tax_gst" }],
+          },
+        ],
+      },
+      ctx,
+    );
+
+    expect(listSalesTaxes).toHaveBeenCalledTimes(1);
+    const [, vars] = moneyTransactionCreate.mock.calls[0] as [
+      unknown,
+      { input: { lineItems: Array<{ taxes?: Array<{ salesTaxId: string; amount: string }> }> } },
+    ];
+    expect(vars.input.lineItems[0]?.taxes).toEqual([{ salesTaxId: "tax_gst", amount: "5.00" }]);
+  });
+
+  it("taxInclusive=true backs the tax out of the line amount", async () => {
+    const moneyTransactionCreate = vi.fn().mockResolvedValue({
+      moneyTransactionCreate: {
+        didSucceed: true,
+        inputErrors: [],
+        transaction: { id: "txn_inc" },
+      },
+    });
+    // 5% inclusive: amount=105 (gross) → tax=105*0.05/1.05 = 5.00
+    const listSalesTaxes = vi.fn().mockResolvedValue({
+      business: {
+        salesTaxes: {
+          edges: [{ node: { id: "tax_gst", name: "GST", abbreviation: "GST", rate: "0.05" } }],
+        },
+      },
+    });
+    const ctx = makeCtx(moneyTransactionCreate);
+    (ctx.wave as unknown as { listSalesTaxes: typeof listSalesTaxes }).listSalesTaxes =
+      listSalesTaxes;
+
+    await splitTransactionTool.handler(
+      {
+        anchor: { ...VALID_ANCHOR, totalAmount: -105 },
+        lines: [
+          {
+            accountId: "acct_expense",
+            amount: 105,
+            taxInclusive: true,
+            salesTaxes: [{ salesTaxId: "tax_gst" }],
+          },
+        ],
+      },
+      ctx,
+    );
+
+    const [, vars] = moneyTransactionCreate.mock.calls[0] as [
+      unknown,
+      { input: { lineItems: Array<{ taxes?: Array<{ salesTaxId: string; amount: string }> }> } },
+    ];
+    expect(vars.input.lineItems[0]?.taxes).toEqual([{ salesTaxId: "tax_gst", amount: "5.00" }]);
+  });
+
+  it("multiple lines referencing the same tax id fetch salesTaxes ONCE", async () => {
+    const moneyTransactionCreate = vi.fn().mockResolvedValue({
+      moneyTransactionCreate: {
+        didSucceed: true,
+        inputErrors: [],
+        transaction: { id: "txn_cache" },
+      },
+    });
+    const listSalesTaxes = vi.fn().mockResolvedValue({
+      business: {
+        salesTaxes: {
+          edges: [{ node: { id: "tax_gst", name: "GST", abbreviation: "GST", rate: "0.05" } }],
+        },
+      },
+    });
+    const ctx = makeCtx(moneyTransactionCreate);
+    (ctx.wave as unknown as { listSalesTaxes: typeof listSalesTaxes }).listSalesTaxes =
+      listSalesTaxes;
+
+    await splitTransactionTool.handler(
+      {
+        anchor: { ...VALID_ANCHOR, totalAmount: -210 },
+        lines: [
+          {
+            accountId: "acct_a",
+            amount: 100,
+            salesTaxes: [{ salesTaxId: "tax_gst" }],
+          },
+          {
+            accountId: "acct_b",
+            amount: 100,
+            salesTaxes: [{ salesTaxId: "tax_gst" }],
+          },
+        ],
+      },
+      ctx,
+    );
+
+    expect(listSalesTaxes).toHaveBeenCalledTimes(1);
+  });
+
+  it("throws SALES_TAX_NOT_FOUND with the missing id when the tax is unknown", async () => {
+    const moneyTransactionCreate = vi.fn();
+    const listSalesTaxes = vi.fn().mockResolvedValue({
+      business: {
+        salesTaxes: {
+          edges: [{ node: { id: "tax_gst", name: "GST", abbreviation: "GST", rate: "0.05" } }],
+        },
+      },
+    });
+    const ctx = makeCtx(moneyTransactionCreate);
+    (ctx.wave as unknown as { listSalesTaxes: typeof listSalesTaxes }).listSalesTaxes =
+      listSalesTaxes;
 
     const err = (await splitTransactionTool
       .handler(
@@ -170,7 +339,7 @@ describe("split_transaction tool", () => {
             {
               accountId: "acct_expense",
               amount: 90,
-              salesTaxes: [{ salesTaxId: "tax_tps_tvq" }],
+              salesTaxes: [{ salesTaxId: "tax_unknown" }],
             },
           ],
         },
@@ -179,7 +348,8 @@ describe("split_transaction tool", () => {
       .catch((e) => e)) as ToolError;
 
     expect(err).toBeInstanceOf(ToolError);
-    expect(err.code).toBe("SALES_TAX_AMOUNT_REQUIRED");
+    expect(err.code).toBe("SALES_TAX_NOT_FOUND");
+    expect(err.details).toMatchObject({ salesTaxId: "tax_unknown" });
     expect(moneyTransactionCreate).not.toHaveBeenCalled();
   });
 
