@@ -141,7 +141,7 @@ describe("SingleTenantOAuthProvider", () => {
       expect(outcome.kind).toBe("consent");
       if (outcome.kind !== "consent") throw new Error("expected consent");
       expect(outcome.status).toBe(200);
-      expect(outcome.html).toContain("Authorize mcp-wave");
+      expect(outcome.html).toContain("Connect to Wave");
       expect(outcome.html).toContain("consent_secret");
     });
 
