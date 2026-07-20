@@ -1,13 +1,17 @@
 name: deploy
 
-# Build the production image, push it to the Scaleway Container Registry (primary,
-# used for the rollout) and to GHCR (mirror, public, no pull secret needed), then
-# roll it out on the poc Kapsule cluster. This is the ONLY supported deploy path
-# (no manual rollouts). Secrets required (repo settings):
+# Build the production image, push it to the Scaleway Container Registry
+# (primary, used for the rollout), then roll it out on the poc Kapsule cluster.
+# This is the ONLY supported deploy path (no manual rollouts). Secrets required
+# (repo settings):
 #   SCW_REGISTRY_USER / SCW_REGISTRY_PASSWORD  - docker login to rg.fr-par.scw.cloud
 #   KUBE_CONFIG                                - base64 kubeconfig of the namespace-scoped
 #                                                mcp-wave-deployer ServiceAccount
-# GHCR push uses the built-in GITHUB_TOKEN, no extra secret required.
+# The image is also mirrored to GHCR (public, no pull secret needed) by copying
+# the already-pushed Scaleway manifest with `docker buildx imagetools create`
+# (no rebuild). That step is best-effort (continue-on-error): a GHCR failure
+# (e.g. package not yet created/public) must never block the Scaleway push or
+# the deploy. GHCR push uses the built-in GITHUB_TOKEN, no extra secret required.
 on:
   push:
     branches: [main]
@@ -46,23 +50,21 @@ jobs:
           echo "${{ secrets.SCW_REGISTRY_PASSWORD }}" \
             | docker login rg.fr-par.scw.cloud -u "${{ secrets.SCW_REGISTRY_USER }}" --password-stdin
 
-      - name: Log in to GHCR
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" \
-            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-
       - name: Build and push image
         run: |
           TAG="${GITHUB_SHA::7}"
-          docker build \
-            -t "${IMAGE}:${TAG}" -t "${IMAGE}:latest" \
-            -t "${GHCR_IMAGE}:${TAG}" -t "${GHCR_IMAGE}:latest" \
-            .
+          docker build -t "${IMAGE}:${TAG}" -t "${IMAGE}:latest" .
           docker push "${IMAGE}:${TAG}"
           docker push "${IMAGE}:latest"
-          docker push "${GHCR_IMAGE}:${TAG}"
-          docker push "${GHCR_IMAGE}:latest"
           echo "TAG=${TAG}" >> "${GITHUB_ENV}"
+
+      - name: Mirror image to GHCR (best-effort)
+        continue-on-error: true
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker buildx imagetools create --tag "${GHCR_IMAGE}:${TAG}" "${IMAGE}:${TAG}"
+          docker buildx imagetools create --tag "${GHCR_IMAGE}:latest" "${IMAGE}:${TAG}"
 
       - uses: azure/setup-kubectl@v4
 
