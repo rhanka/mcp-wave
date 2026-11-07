@@ -145,8 +145,9 @@ limits, useful for daily bookkeeping, and safe to operate.
 - Urgent deploy path extracted from `WP-MCP-06` so the current MCP can run
   persistently while Tracks 2 and 3 continue.
 - Target platform is OVHcloud Managed Kubernetes Service in the POC project.
-- Image registry remains Scaleway Container Registry during the MKS cutover.
-  Its migration to GHCR is a separate follow-up, not part of this scope.
+- Image registry: public GHCR `ghcr.io/rhanka/mcp-wave`, pinned by digest,
+  no `imagePullSecrets` (platform decision 2026-07-17; Scaleway registry
+  retired).
 - No GCP/Cloud Run path is active for this WP.
 
 **Outcome**

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # One-command OVHcloud Managed Kubernetes deploy for mcp-wave. Mirrors
-# deploy/ovh/README.md and uses the existing Scaleway Container Registry.
+# deploy/ovh/README.md and publishes to public GHCR (ghcr.io/rhanka), pinned
+# by digest. Requires `docker login ghcr.io` with a token holding write:packages.
 set -euo pipefail
 
 # --- Required environment ---------------------------------------------------
@@ -10,7 +11,7 @@ set -euo pipefail
 : "${OAUTH_CONSENT_SECRET:?set OAUTH_CONSENT_SECRET (operator-chosen)}"
 
 # --- Optional (defaults) ----------------------------------------------------
-REGISTRY="${REGISTRY:-rg.fr-par.scw.cloud/mcp-wave}"
+REGISTRY="${REGISTRY:-ghcr.io/rhanka}"
 NAMESPACE="${NAMESPACE:-mcp-wave}"
 IMAGE="${IMAGE:-${REGISTRY}/mcp-wave:$(git rev-parse --short HEAD)}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -43,6 +44,9 @@ echo "==> Image smoke OK"
 
 echo "==> Pushing image"
 docker push "${IMAGE}"
+DIGEST="$(docker buildx imagetools inspect "${IMAGE}" --format "{{.Manifest.Digest}}")"
+case "${DIGEST}" in sha256:*) ;; *) echo "could not resolve pushed digest for ${IMAGE}"; exit 1 ;; esac
+echo "==> Pushed ${IMAGE%:*}@${DIGEST}"
 
 # --- Runtime config (non-secret) --------------------------------------------
 echo "==> Applying ConfigMap"
@@ -76,7 +80,7 @@ echo "==> Applying manifests"
 WORK="$(mktemp -d)"
 trap 'rm -rf "${WORK}"' EXIT
 cp -R "${REPO_ROOT}/deploy/ovh/." "${WORK}/"
-sed -i "s|newName: mcp-wave|newName: ${IMAGE%:*}|; s|newTag: local|newTag: ${IMAGE##*:}|" "${WORK}/kustomization.yaml"
+sed -i "s|newName: .*|newName: ${IMAGE%:*}|; s|digest: .*|digest: ${DIGEST}|" "${WORK}/kustomization.yaml"
 kubectl apply -k "${WORK}"
 kubectl -n "${NAMESPACE}" rollout status deployment/mcp-wave --timeout=180s
 
@@ -90,4 +94,4 @@ code="$(curl -s -o /dev/null -w '%{http_code}' -X POST "https://${MCP_WAVE_HOST}
   --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}')"
 [ "${code}" = "401" ] && echo "unauth /mcp -> 401 OK" || { echo "expected 401 from /mcp, got ${code}"; exit 1; }
 
-echo "==> Deploy complete: ${IMAGE}"
+echo "==> Deploy complete: ${IMAGE%:*}@${DIGEST} (${IMAGE##*:})"

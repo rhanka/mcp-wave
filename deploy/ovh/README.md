@@ -11,9 +11,11 @@ local image smoke test, push, manifest apply, rollout, and remote smoke checks.
   `mcp-wave` service account already provisioned. The `mcp-wave-config` and
   `mcp-wave-secret` runtime resources must also exist before the first CI
   rollout; the operator script creates them from its required environment.
-- The existing Scaleway Container Registry credentials remain configured for
-  the image build and pull. Moving images to GHCR is deliberately a separate
-  migration from the Kubernetes cutover.
+- Images are published to public GHCR, `ghcr.io/rhanka/mcp-wave`, and pulled
+  without `imagePullSecrets` (platform decision 2026-07-17). Manifests and
+  rollouts pin the image by digest, never by tag. The `registry-guard`
+  workflow fails on any Scaleway registry reference, a missing digest pin, or
+  an `imagePullSecrets` entry.
 - The measured OVH ingress contract is Traefik, with cert-manager's
   `letsencrypt-prod` ClusterIssuer and Octavia load balancer `51.79.100.177`.
 - DNS for `MCP_WAVE_HOST` pointing to the ingress load balancer.
@@ -27,12 +29,15 @@ manifest update.
 
 Set these repository secrets:
 
-- Keep `SCW_REGISTRY_USER` and `SCW_REGISTRY_PASSWORD` unchanged.
-- Replace the value of `KUBE_CONFIG` with the base64 value from
-  `OVH_KUBECONFIG_B64_MCP_WAVE`. The secret name does not change.
+- `KUBE_CONFIG`: the base64 value from `OVH_KUBECONFIG_B64_MCP_WAVE` (the
+  namespace-scoped OVH ci-deployer account). The secret name does not change.
+- No registry secret: GHCR push uses the workflow `GITHUB_TOKEN` with
+  `packages: write`. The two former Scaleway registry login secrets are no
+  longer used and can be deleted from the repository settings.
 
 On each `main` change, the workflow pushes the short-SHA and `latest` image to
-the existing registry, updates the Deployment, waits for the rollout, then
+GHCR, resolves the pushed digest, updates the Deployment to
+`ghcr.io/rhanka/mcp-wave@sha256:<digest>`, waits for the rollout, then
 proves that the public hostname resolves to the OVH load balancer by comparing
 the TLS certificate serials.
 
@@ -54,8 +59,9 @@ export OAUTH_CONSENT_SECRET=<random-secret>
 deploy/ovh/deploy.sh
 ```
 
-The script assumes Docker is already logged in to the existing Scaleway
-registry. It generates the non-secret ConfigMap and application Secret from
+The script assumes Docker is already logged in to `ghcr.io` with a token that
+holds `write:packages`. It pushes, resolves the digest, pins it in a temporary
+copy of `kustomization.yaml`, and applies it. It generates the non-secret ConfigMap and application Secret from
 these inputs.
 
 ## Smoke checks

@@ -1,9 +1,14 @@
 name: deploy
 
-# Build the production image, push it to the existing Scaleway Container
-# Registry, and roll it out on OVHcloud Managed Kubernetes Service. The only
-# GitHub migration is the content of KUBE_CONFIG: replace it with the supplied
-# base64-encoded OVH kubeconfig for the namespace-scoped ci-deployer account.
+# Build the production image, push it to public GHCR (ghcr.io/rhanka/mcp-wave),
+# and roll it out on OVHcloud Managed Kubernetes Service, pinned by digest.
+# This is the only supported deploy path (no manual rollouts).
+#
+# Platform decision 2026-07-17: tenant images live on public GHCR, pulled
+# without imagePullSecrets. Secrets required (repo settings):
+#   KUBE_CONFIG - base64 kubeconfig of the namespace-scoped OVH ci-deployer
+#                 account (needs get/patch on deployment/mcp-wave).
+# GHCR push uses the built-in GITHUB_TOKEN (packages: write), no extra secret.
 on:
   push:
     branches: [main]
@@ -27,8 +32,7 @@ permissions:
   packages: write
 
 env:
-  IMAGE: rg.fr-par.scw.cloud/mcp-wave/mcp-wave
-  GHCR_IMAGE: ghcr.io/rhanka/mcp-wave
+  IMAGE: ghcr.io/rhanka/mcp-wave
   NAMESPACE: mcp-wave
   PUBLIC_HOST: mcp-wave.sent-tech.ca
   OVH_INGRESS_IP: 51.79.100.177
@@ -39,10 +43,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Log in to Scaleway Container Registry
+      - name: Log in to GHCR
         run: |
-          echo "${{ secrets.SCW_REGISTRY_PASSWORD }}" \
-            | docker login rg.fr-par.scw.cloud -u "${{ secrets.SCW_REGISTRY_USER }}" --password-stdin
+          echo "${{ secrets.GITHUB_TOKEN }}" \
+            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Build and push image
         run: |
@@ -50,15 +54,13 @@ jobs:
           docker build -t "${IMAGE}:${TAG}" -t "${IMAGE}:latest" .
           docker push "${IMAGE}:${TAG}"
           docker push "${IMAGE}:latest"
-          echo "TAG=${TAG}" >> "${GITHUB_ENV}"
-
-      - name: Mirror image to GHCR (best-effort)
-        continue-on-error: true
-        run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" \
-            | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
-          docker buildx imagetools create --tag "${GHCR_IMAGE}:${TAG}" "${IMAGE}:${TAG}"
-          docker buildx imagetools create --tag "${GHCR_IMAGE}:latest" "${IMAGE}:${TAG}"
+          DIGEST="$(docker buildx imagetools inspect "${IMAGE}:${TAG}" --format '{{.Manifest.Digest}}')"
+          case "${DIGEST}" in
+            sha256:*) ;;
+            *) echo "could not resolve pushed digest for ${IMAGE}:${TAG}" >&2; exit 1 ;;
+          esac
+          echo "Pushed ${IMAGE}:${TAG} = ${IMAGE}@${DIGEST}"
+          echo "DIGEST=${DIGEST}" >> "${GITHUB_ENV}"
 
       - uses: azure/setup-kubectl@v4
 
@@ -68,9 +70,9 @@ jobs:
           mkdir -p "${HOME}/.kube"
           echo "${{ secrets.KUBE_CONFIG }}" | base64 --decode > "${HOME}/.kube/config"
 
-      - name: Roll out
+      - name: Roll out (pinned by digest)
         run: |
-          kubectl -n "${NAMESPACE}" set image deployment/mcp-wave "mcp-wave=${IMAGE}:${TAG}"
+          kubectl -n "${NAMESPACE}" set image deployment/mcp-wave "mcp-wave=${IMAGE}@${DIGEST}"
           kubectl -n "${NAMESPACE}" rollout status deployment/mcp-wave --timeout=180s
 
       - name: Verify that the public hostname serves OVH

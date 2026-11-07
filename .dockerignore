@@ -10,4 +10,4 @@ coverage
 .env.*
 !.env.example
 *.log
-deploy/scw/secret.example.yaml
+deploy/ovh/secret.example.yaml

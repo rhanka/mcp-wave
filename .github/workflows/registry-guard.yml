@@ -1,0 +1,36 @@
+name: registry-guard
+
+# Platform decision 2026-07-17: tenant images live on public GHCR
+# (ghcr.io/rhanka/<image>), pinned by digest, without imagePullSecrets.
+# This guard fails if the retired Scaleway registry comes back into the repo
+# or if the deploy manifests stop pinning the image by digest.
+# docs/superpowers/ holds dated, historical design records and is exempt.
+on:
+  push:
+    branches: [main]
+  pull_request: {}
+
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No Scaleway registry reference
+        run: |
+          if git grep -nE 'scw\.cloud|SCW_REGISTRY' -- . ':(exclude)docs/superpowers/'; then
+            echo "Scaleway registry reference found; images must come from ghcr.io/rhanka" >&2
+            exit 1
+          fi
+
+      - name: Deploy manifests pin a GHCR image by digest, without pull secret
+        run: |
+          grep -qE '^\s*newName:\s*ghcr\.io/rhanka/mcp-wave\s*$' deploy/ovh/kustomization.yaml
+          grep -qE '^\s*digest:\s*sha256:[0-9a-f]{64}\s*$' deploy/ovh/kustomization.yaml
+          if git grep -nE '^[[:space:]]*imagePullSecrets[[:space:]]*:' -- 'deploy/*.yaml' 'deploy/*.yml'; then
+            echo "imagePullSecrets is not allowed: GHCR images are public" >&2
+            exit 1
+          fi

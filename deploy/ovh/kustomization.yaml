@@ -6,7 +6,11 @@ resources:
   - service.yaml
   - ingress.yaml
   - pvc.yaml
+# Public GHCR image, pinned by digest (no imagePullSecrets). The digest below is
+# the last image released through this manifest (52de3c9, byte-identical to the
+# former Scaleway image). CI rolls out newer digests with `kubectl set image`;
+# deploy.sh rewrites this digest for operator deployments.
 images:
   - name: mcp-wave
-    newName: mcp-wave
-    newTag: local
+    newName: ghcr.io/rhanka/mcp-wave
+    digest: sha256:09575f639d6960d6c2e2a5d166aecbd7072f7e7af1e90a4b6c170ee462a77760
