@@ -4,7 +4,8 @@ import { StreamableHTTPTransport } from "@hono/mcp";
 import { bearerAuth } from "@hono/mcp/auth";
 import { serve } from "@hono/node-server";
 import { GraphQLClient } from "graphql-request";
-import { type Context, Hono } from "hono";
+import { type Context, Hono, type MiddlewareHandler } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import { type AppEnv, parseEnv } from "../config/env.js";
 import { createLogger } from "../config/logger.js";
 import { AccountMappingLoader } from "../domain/tax/account-mapping-loader.js";
@@ -34,6 +35,22 @@ export interface OAuthHttpDeps {
 
 interface McpSession {
   transport: StreamableHTTPTransport;
+  /** OAuth client that created the session; other clients cannot reuse it. */
+  clientId: string;
+}
+
+/** Request body caps: MCP carries CSV payloads, OAuth endpoints carry forms. */
+export const MCP_BODY_LIMIT_BYTES = 4 * 1024 * 1024;
+export const DEFAULT_BODY_LIMIT_BYTES = 64 * 1024;
+/** Consent-secret attempts allowed per client address per minute. */
+export const AUTHORIZE_POST_RPM = 5;
+/** Live MCP sessions kept in memory; the oldest is closed beyond this. */
+export const MAX_MCP_SESSIONS = 100;
+
+const isMcpPath = (path: string): boolean => path === "/mcp" || path === "/";
+
+function tooLarge(c: Context): Response {
+  return c.json({ error: "PAYLOAD_TOO_LARGE" }, 413);
 }
 
 export function buildOAuthHonoApp(deps: OAuthHttpDeps): Hono {
@@ -60,6 +77,17 @@ export function buildOAuthHonoApp(deps: OAuthHttpDeps): Hono {
   // browser-driven flow (the operator opens /authorize and submits the consent
   // form same-origin), so a global allowlist would 403 them — scope it to /mcp.
   app.use("*", rateLimit(deps.env.RATE_LIMIT_RPM));
+
+  // Bound request bodies before anything parses them (OAuth forms/JSON are
+  // parsed before authentication).
+  const mcpBodyLimit = bodyLimit({ maxSize: MCP_BODY_LIMIT_BYTES, onError: tooLarge });
+  const defaultBodyLimit = bodyLimit({ maxSize: DEFAULT_BODY_LIMIT_BYTES, onError: tooLarge });
+  app.use("*", (c, next) => (isMcpPath(c.req.path) ? mcpBodyLimit : defaultBodyLimit)(c, next));
+
+  // The consent secret is the only credential guarding /authorize: throttle
+  // submissions far below the global limit to make guessing impractical.
+  const authorizePostLimit: MiddlewareHandler = rateLimit(AUTHORIZE_POST_RPM);
+  app.post("/authorize", authorizePostLimit);
 
   // Access log (skip k8s probes) — surfaces the OAuth handler responses, which
   // the @hono/mcp handlers do not log themselves.
@@ -133,12 +161,22 @@ export function buildOAuthHonoApp(deps: OAuthHttpDeps): Hono {
   const mcpHandler = async (c: Context) => {
     const requestId = randomUUID();
     const requestedSessionId = c.req.header("mcp-session-id");
+    // requireAuth guarantees a valid bearer token; re-read it for identity.
+    const token = (c.req.header("authorization") ?? "").replace(/^Bearer\s+/i, "");
+    const authInfo = await oauthProvider.verifyAccessToken(token);
     let session = requestedSessionId ? sessions.get(requestedSessionId) : undefined;
 
+    // A session id is not a credential: only the OAuth client that opened the
+    // session may use it. Answer like an unknown session (MCP: 404 => re-init).
+    if (session && session.clientId !== authInfo.clientId) {
+      deps.logger.warn({ request_id: requestId }, "mcp session used by another oauth client");
+      return c.json(
+        { jsonrpc: "2.0", error: { code: -32001, message: "Session not found" }, id: null },
+        404,
+      );
+    }
+
     if (!session) {
-      // requireAuth guarantees a valid bearer token; re-read it for identity.
-      const token = (c.req.header("authorization") ?? "").replace(/^Bearer\s+/i, "");
-      const authInfo = await oauthProvider.verifyAccessToken(token);
       const identity = `oauth:${authInfo.clientId}:${String(authInfo.extra?.["tokenHashPrefix"] ?? "unknown")}`;
 
       let created: McpSession | undefined;
@@ -146,13 +184,20 @@ export function buildOAuthHonoApp(deps: OAuthHttpDeps): Hono {
         enableJsonResponse: true,
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (sessionId) => {
-          if (created) sessions.set(sessionId, created);
+          if (!created) return;
+          // Bound memory: close the oldest sessions (Map keeps insertion order).
+          for (const [oldId, old] of sessions) {
+            if (sessions.size < MAX_MCP_SESSIONS) break;
+            sessions.delete(oldId);
+            void old.transport.close().catch(() => undefined);
+          }
+          sessions.set(sessionId, created);
         },
         onsessionclosed: (sessionId) => {
           sessions.delete(sessionId);
         },
       });
-      created = { transport };
+      created = { transport, clientId: authInfo.clientId };
 
       const { server } = buildMcpServer({
         tools: allTools(),
