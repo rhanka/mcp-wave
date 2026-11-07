@@ -9,7 +9,6 @@ import type { createLogger } from "../../../src/config/logger.js";
 import { AccountMappingLoader } from "../../../src/domain/tax/account-mapping-loader.js";
 import { TaxRatesLoader } from "../../../src/domain/tax/rates-loader.js";
 import {
-  AUTHORIZE_POST_RPM,
   buildOAuthHonoApp,
   DEFAULT_BODY_LIMIT_BYTES,
   MCP_BODY_LIMIT_BYTES,
@@ -22,7 +21,7 @@ const REDIRECT = "https://claude.ai/api/mcp/auth_callback";
 const RESOURCE = "http://localhost:8080/mcp";
 const VERIFIER = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~";
 
-async function appFor(): Promise<Hono> {
+async function appFor(rateLimitRpm = 1000): Promise<Hono> {
   const dir = await mkdtemp(join(tmpdir(), "mcp-wave-oauth-hardening-"));
   const env: AppEnv = {
     WAVE_AUTH_MODE: "env_token",
@@ -33,7 +32,7 @@ async function appFor(): Promise<Hono> {
     LOG_PII: false,
     NODE_ENV: "test",
     ALLOWED_ORIGINS: "https://claude.ai,http://localhost:*",
-    RATE_LIMIT_RPM: 1000,
+    RATE_LIMIT_RPM: rateLimitRpm,
     PUBLIC_BASE_URL: "http://localhost:8080",
     OAUTH_ISSUER_URL: "http://localhost:8080",
     OAUTH_CONSENT_SECRET: "consent",
@@ -141,28 +140,53 @@ const initialize = JSON.stringify({
 });
 
 describe("OAuth Hono MCP entrypoint hardening", () => {
-  it("throttles consent-secret guessing on POST /authorize per client address", async () => {
-    const app = await appFor();
-    const clientId = await registerClient(app);
-    const attempt = (xff: string) =>
-      app.request("/authorize", {
-        method: "POST",
-        headers: { ...form, "x-forwarded-for": xff },
-        body: authorizeBody(clientId, "wrong-guess"),
-      });
+  it("an anonymous flood from the shared ingress address cannot starve an authenticated MCP client", async () => {
+    // Behind poc-ca's ingress every client arrives with the same node address.
+    const nodeIp = "10.0.0.9";
+    const app = await appFor(12);
+    const token = await accessTokenFor(app, nodeIp);
 
-    for (let i = 0; i < AUTHORIZE_POST_RPM; i += 1) {
-      expect((await attempt("203.0.113.50")).status).toBe(401);
+    // Exhaust the address-keyed (effectively global) limiter.
+    let throttled = 0;
+    for (let i = 0; i < 20; i += 1) {
+      const res = await app.request("/.well-known/oauth-authorization-server", {
+        headers: { "x-forwarded-for": nodeIp },
+      });
+      if (res.status === 429) throttled += 1;
     }
-    expect((await attempt("203.0.113.50")).status).toBe(429);
-    // Prepending a forged hop does not yield a fresh budget: the proxy-appended
-    // (right-most) address is the key.
-    expect((await attempt("198.51.100.7, 203.0.113.50")).status).toBe(429);
-    // GET (render the consent form) is not throttled by the strict limiter.
-    const get = await app.request(`/authorize?${authorizeBody(clientId, "")}`, {
-      headers: { origin: "https://claude.ai", "x-forwarded-for": "203.0.113.50" },
+    expect(throttled).toBeGreaterThan(0);
+
+    // The authenticated client keeps its own per-token budget on /mcp.
+    const init = await app.request("/mcp", {
+      method: "POST",
+      headers: { ...mcpHeaders(token), "x-forwarded-for": nodeIp },
+      body: initialize,
     });
-    expect(get.status).toBe(200);
+    expect(init.status).toBe(200);
+
+    // Anonymous /mcp calls are rejected by auth (401) without touching it.
+    const anon = await app.request("/mcp", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-forwarded-for": nodeIp },
+      body: initialize,
+    });
+    expect(anon.status).toBe(401);
+  });
+
+  it("limits authenticated MCP traffic per bearer token", async () => {
+    const app = await appFor(3);
+    const token = await accessTokenFor(app, "203.0.113.80");
+    const statuses: number[] = [];
+    for (let i = 0; i < 5; i += 1) {
+      const res = await app.request("/mcp", {
+        method: "POST",
+        headers: mcpHeaders(token),
+        body: initialize,
+      });
+      statuses.push(res.status);
+    }
+    expect(statuses.slice(0, 3)).toEqual([200, 200, 200]);
+    expect(statuses.at(-1)).toBe(429);
   });
 
   it("rejects oversized bodies on OAuth endpoints with 413 before parsing", async () => {

@@ -12,6 +12,8 @@ export interface RateLimitOptions {
    * are dropped. Bounds memory against key-spraying clients.
    */
   maxKeys?: number;
+  /** Bucket key for a request; defaults to the client address (clientKey). */
+  key?: (c: Context) => string;
 }
 
 const DEFAULT_MAX_KEYS = 10_000;
@@ -27,6 +29,12 @@ const REGISTRY = new Set<Map<string, Bucket>>();
  * keying on it lets a caller bypass the limit by rotating the header. The
  * right-most entry is the peer address appended (or set) by the nearest
  * reverse proxy (Traefik in front of this pod), which the client cannot forge.
+ *
+ * On poc-ca (2026-11-07) Traefik sits behind an Octavia TCP load balancer with
+ * externalTrafficPolicy=Cluster and no PROXY protocol: the address it records
+ * is a node IP shared by every client, so an address-keyed limit acts as a
+ * global limit there. Authenticated traffic is therefore limited per token
+ * (see oauth-http), not per address.
  */
 export function clientKey(c: Context): string {
   const xff = c.req.header("x-forwarded-for");
@@ -44,6 +52,7 @@ export function clientKey(c: Context): string {
 export function rateLimit(rpm: number, options: RateLimitOptions = {}): MiddlewareHandler {
   const refillRate = rpm / 60_000;
   const maxKeys = options.maxKeys ?? DEFAULT_MAX_KEYS;
+  const keyOf = options.key ?? clientKey;
   const buckets = new Map<string, Bucket>();
   REGISTRY.add(buckets);
 
@@ -59,7 +68,7 @@ export function rateLimit(rpm: number, options: RateLimitOptions = {}): Middlewa
   };
 
   return async (c, next) => {
-    const key = clientKey(c);
+    const key = keyOf(c);
     const now = Date.now();
     let bucket = buckets.get(key);
     if (!bucket) {

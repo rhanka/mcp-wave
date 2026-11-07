@@ -39,6 +39,21 @@ describe("OAuth environment parsing", () => {
     ).toThrow("OAUTH_CONSENT_SECRET is required in production");
   });
 
+  it("rejects a production consent secret shorter than 32 characters", () => {
+    const prod = {
+      ...base,
+      NODE_ENV: "production",
+      PUBLIC_BASE_URL: "https://mcp-wave.example.invalid",
+      OAUTH_ISSUER_URL: "https://mcp-wave.example.invalid",
+    };
+    expect(() => parseEnv({ ...prod, OAUTH_CONSENT_SECRET: "x".repeat(31) })).toThrow(
+      "OAUTH_CONSENT_SECRET must be at least 32 characters in production",
+    );
+    expect(
+      parseEnv({ ...prod, OAUTH_CONSENT_SECRET: "x".repeat(32) }).OAUTH_CONSENT_SECRET,
+    ).toHaveLength(32);
+  });
+
   it("rejects production HTTP public URLs", () => {
     expect(() =>
       parseEnv({

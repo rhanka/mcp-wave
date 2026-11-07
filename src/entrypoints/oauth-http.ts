@@ -4,7 +4,7 @@ import { StreamableHTTPTransport } from "@hono/mcp";
 import { bearerAuth } from "@hono/mcp/auth";
 import { serve } from "@hono/node-server";
 import { GraphQLClient } from "graphql-request";
-import { type Context, Hono, type MiddlewareHandler } from "hono";
+import { type Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { type AppEnv, parseEnv } from "../config/env.js";
 import { createLogger } from "../config/logger.js";
@@ -14,6 +14,7 @@ import { originAllowlist } from "../server/http/origin-allowlist.js";
 import { rateLimit } from "../server/http/rate-limit.js";
 import { buildMcpServer } from "../server/mcp-server.js";
 import { OAUTH_SCOPE, oauthConfigFromEnv } from "../server/oauth/config.js";
+import { sha256Hex } from "../server/oauth/crypto.js";
 import { FileOAuthStore } from "../server/oauth/file-store.js";
 import { buildOAuthRoutes } from "../server/oauth/hono-oauth-router.js";
 import { SingleTenantOAuthProvider } from "../server/oauth/single-tenant-provider.js";
@@ -42,8 +43,6 @@ interface McpSession {
 /** Request body caps: MCP carries CSV payloads, OAuth endpoints carry forms. */
 export const MCP_BODY_LIMIT_BYTES = 4 * 1024 * 1024;
 export const DEFAULT_BODY_LIMIT_BYTES = 64 * 1024;
-/** Consent-secret attempts allowed per client address per minute. */
-export const AUTHORIZE_POST_RPM = 5;
 /** Live MCP sessions kept in memory; the oldest is closed beyond this. */
 export const MAX_MCP_SESSIONS = 100;
 
@@ -76,18 +75,22 @@ export function buildOAuthHonoApp(deps: OAuthHttpDeps): Hono {
   // protection for the browser-called /mcp). The OAuth endpoints are part of a
   // browser-driven flow (the operator opens /authorize and submits the consent
   // form same-origin), so a global allowlist would 403 them — scope it to /mcp.
-  app.use("*", rateLimit(deps.env.RATE_LIMIT_RPM));
+  // Unauthenticated routes share one address-keyed limiter. Behind the
+  // shared-IP ingress that key is effectively global, so the MCP endpoints are
+  // excluded here and limited per bearer token after authentication instead:
+  // anonymous floods cannot starve an authenticated client.
+  const anonymousLimit = rateLimit(deps.env.RATE_LIMIT_RPM);
+  app.use("*", (c, next) => (isMcpPath(c.req.path) ? next() : anonymousLimit(c, next)));
+  const perTokenLimit = rateLimit(deps.env.RATE_LIMIT_RPM, {
+    key: (c) =>
+      `bearer:${sha256Hex((c.req.header("authorization") ?? "").replace(/^Bearer\s+/i, ""))}`,
+  });
 
   // Bound request bodies before anything parses them (OAuth forms/JSON are
   // parsed before authentication).
   const mcpBodyLimit = bodyLimit({ maxSize: MCP_BODY_LIMIT_BYTES, onError: tooLarge });
   const defaultBodyLimit = bodyLimit({ maxSize: DEFAULT_BODY_LIMIT_BYTES, onError: tooLarge });
   app.use("*", (c, next) => (isMcpPath(c.req.path) ? mcpBodyLimit : defaultBodyLimit)(c, next));
-
-  // The consent secret is the only credential guarding /authorize: throttle
-  // submissions far below the global limit to make guessing impractical.
-  const authorizePostLimit: MiddlewareHandler = rateLimit(AUTHORIZE_POST_RPM);
-  app.post("/authorize", authorizePostLimit);
 
   // Access log (skip k8s probes) — surfaces the OAuth handler responses, which
   // the @hono/mcp handlers do not log themselves.
@@ -235,8 +238,8 @@ export function buildOAuthHonoApp(deps: OAuthHttpDeps): Hono {
   // Serve the MCP endpoint at both the dedicated /mcp path and the root, so the
   // connector works whether it is registered as https://host or https://host/mcp
   // (Claude.ai connects at the path the 401 came from).
-  app.all("/mcp", originAllowlist(allowedOrigins), requireAuth, mcpHandler);
-  app.all("/", originAllowlist(allowedOrigins), requireAuth, mcpHandler);
+  app.all("/mcp", originAllowlist(allowedOrigins), requireAuth, perTokenLimit, mcpHandler);
+  app.all("/", originAllowlist(allowedOrigins), requireAuth, perTokenLimit, mcpHandler);
 
   return app;
 }
