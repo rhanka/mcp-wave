@@ -1,17 +1,9 @@
 name: deploy
 
-# Build the production image, push it to the Scaleway Container Registry
-# (primary, used for the rollout), then roll it out on the poc Kapsule cluster.
-# This is the ONLY supported deploy path (no manual rollouts). Secrets required
-# (repo settings):
-#   SCW_REGISTRY_USER / SCW_REGISTRY_PASSWORD  - docker login to rg.fr-par.scw.cloud
-#   KUBE_CONFIG                                - base64 kubeconfig of the namespace-scoped
-#                                                mcp-wave-deployer ServiceAccount
-# The image is also mirrored to GHCR (public, no pull secret needed) by copying
-# the already-pushed Scaleway manifest with `docker buildx imagetools create`
-# (no rebuild). That step is best-effort (continue-on-error): a GHCR failure
-# (e.g. package not yet created/public) must never block the Scaleway push or
-# the deploy. GHCR push uses the built-in GITHUB_TOKEN, no extra secret required.
+# Build the production image, push it to the existing Scaleway Container
+# Registry, and roll it out on OVHcloud Managed Kubernetes Service. The only
+# GitHub migration is the content of KUBE_CONFIG: replace it with the supplied
+# base64-encoded OVH kubeconfig for the namespace-scoped ci-deployer account.
 on:
   push:
     branches: [main]
@@ -22,7 +14,7 @@ on:
       - "package-lock.json"
       - "Dockerfile"
       - ".dockerignore"
-      - "deploy/scw/**"
+      - "deploy/ovh/**"
       - ".github/workflows/deploy.yml"
   workflow_dispatch: {}
 
@@ -38,6 +30,8 @@ env:
   IMAGE: rg.fr-par.scw.cloud/mcp-wave/mcp-wave
   GHCR_IMAGE: ghcr.io/rhanka/mcp-wave
   NAMESPACE: mcp-wave
+  PUBLIC_HOST: mcp-wave.sent-tech.ca
+  OVH_INGRESS_IP: 51.79.100.177
 
 jobs:
   build-and-deploy:
@@ -68,9 +62,27 @@ jobs:
 
       - uses: azure/setup-kubectl@v4
 
+      - name: Configure OVH Kubernetes access
+        run: |
+          umask 077
+          mkdir -p "${HOME}/.kube"
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 --decode > "${HOME}/.kube/config"
+
       - name: Roll out
         run: |
-          mkdir -p "${HOME}/.kube"
-          echo "${{ secrets.KUBE_CONFIG }}" | base64 -d > "${HOME}/.kube/config"
           kubectl -n "${NAMESPACE}" set image deployment/mcp-wave "mcp-wave=${IMAGE}:${TAG}"
           kubectl -n "${NAMESPACE}" rollout status deployment/mcp-wave --timeout=180s
+
+      - name: Verify that the public hostname serves OVH
+        run: |
+          serial_for() {
+            echo | openssl s_client -connect "${1}:443" -servername "${PUBLIC_HOST}" 2>/dev/null \
+              | openssl x509 -noout -serial
+          }
+          normal_serial="$(serial_for "${PUBLIC_HOST}")"
+          ovh_serial="$(serial_for "${OVH_INGRESS_IP}")"
+          test -n "${normal_serial}"
+          test "${normal_serial}" = "${ovh_serial}" || {
+            echo "${PUBLIC_HOST} is not served by the OVH ingress certificate" >&2
+            exit 1
+          }

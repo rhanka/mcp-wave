@@ -7,10 +7,9 @@ metadata:
 spec:
   replicas: 1
   strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 0
-      maxSurge: 1
+    # The OAuth store PVC is ReadWriteOnce. Recreate prevents a rollout from
+    # scheduling the replacement pod before the old pod has detached it.
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: mcp-wave
