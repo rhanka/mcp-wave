@@ -19,6 +19,9 @@ spec:
         app.kubernetes.io/name: mcp-wave
     spec:
       serviceAccountName: mcp-wave
+      # The app never calls the Kubernetes API; do not expose a SA token to the
+      # internet-facing process.
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
