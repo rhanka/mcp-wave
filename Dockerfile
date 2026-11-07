@@ -1,6 +1,10 @@
 FROM node:24-bookworm-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
+COPY .security ./.security
+# Fail the image build on any unallowlisted HIGH/CRITICAL advisory in the
+# runtime dependency tree (the part shipped in the final stage).
+RUN node .security/audit-gate.mjs --omit=dev
 RUN npm ci
 
 FROM deps AS build
