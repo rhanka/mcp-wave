@@ -29,8 +29,13 @@ manifest update.
 
 Set these repository secrets:
 
-- `KUBE_CONFIG`: the base64 value from `OVH_KUBECONFIG_B64_MCP_WAVE` (the
-  namespace-scoped OVH ci-deployer account). The secret name does not change.
+- `KUBE_CONFIG`: the base64 value of `OVH_KUBECONFIG_B64_MCP_WAVE` from the
+  local `.env`, a time-bound token for the OVH service account
+  `mcp-wave/mcp-wave-deployer` (rollout-only Role: deployments
+  get/list/watch/patch/update, replicasets and pods get/list/watch; no secrets,
+  no `pods/exec`). It is minted by the platform (k8s) with an expiry variable
+  next to it; rotation is documented in poc-k8s. Re-set this secret after each
+  rotation. The secret name does not change.
 - No registry secret: GHCR push uses the workflow `GITHUB_TOKEN` with
   `packages: write`. The two former Scaleway registry login secrets are no
   longer used and can be deleted from the repository settings.

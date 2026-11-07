@@ -6,8 +6,9 @@ name: deploy
 #
 # Platform decision 2026-07-17: tenant images live on public GHCR, pulled
 # without imagePullSecrets. Secrets required (repo settings):
-#   KUBE_CONFIG - base64 kubeconfig of the namespace-scoped OVH ci-deployer
-#                 account (needs get/patch on deployment/mcp-wave).
+#   KUBE_CONFIG - base64 kubeconfig of the OVH SA mcp-wave/mcp-wave-deployer
+#                 (Role: deployments get/list/watch/patch/update, replicasets
+#                 and pods get/list/watch; no secrets, no pods/exec).
 # GHCR push uses the built-in GITHUB_TOKEN (packages: write), no extra secret.
 on:
   push:
