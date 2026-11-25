@@ -13,4 +13,4 @@ resources:
 images:
   - name: mcp-wave
     newName: ghcr.io/rhanka/mcp-wave
-    digest: sha256:09575f639d6960d6c2e2a5d166aecbd7072f7e7af1e90a4b6c170ee462a77760
+    digest: sha256:5c6cd4142f4e894a3b71125c124bd97fbfb71a2d894e11fea16d68c2d1df3c22
