@@ -21,7 +21,7 @@ jobs:
 
       - name: No Scaleway registry reference
         run: |
-          if git grep -nE 'scw\.cloud|SCW_REGISTRY' -- . ':(exclude)docs/superpowers/'; then
+          if git grep -nE 'scw\.cloud|SCW_REGISTRY' -- . ':(exclude)docs/superpowers/' ':(exclude).github/workflows/registry-guard.yml'; then
             echo "Scaleway registry reference found; images must come from ghcr.io/rhanka" >&2
             exit 1
           fi
