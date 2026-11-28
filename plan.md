@@ -133,20 +133,21 @@ limits, useful for daily bookkeeping, and safe to operate.
 ### WP-MCP-06 - Deployment and ops hardening `[planned]`
 
 **Outcome**
-- Scaleway/Kapsule validation and production path
+- OVHcloud Managed Kubernetes validation and production path
 - secret management, health checks, smoke checks, operator runbooks
 
 **Exit**
 - deployed MCP with a repeatable ops path
 
-### WP-OPS-01 - Single-tenant Kapsule deploy `[implementation ready]`
+### WP-OPS-01 - Single-tenant OVH Managed Kubernetes deploy `[implementation ready]`
 
 **Context**
 - Urgent deploy path extracted from `WP-MCP-06` so the current MCP can run
   persistently while Tracks 2 and 3 continue.
-- Target platform is Scaleway only: Kapsule cluster in the POC project.
-- Image registry is Scaleway Container Registry for now. Docker Hub public can
-  be revisited later, but is not part of the current scope.
+- Target platform is OVHcloud Managed Kubernetes Service in the POC project.
+- Image registry: public GHCR `ghcr.io/rhanka/mcp-wave`, pinned by digest,
+  no `imagePullSecrets` (platform decision 2026-07-17; Scaleway registry
+  retired).
 - No GCP/Cloud Run path is active for this WP.
 
 **Outcome**
@@ -157,18 +158,21 @@ limits, useful for daily bookkeeping, and safe to operate.
 
 **Decision (2026-05-20)**
 - Option **2** retained: `WP-OPS-01` includes OAuth 2.x support before the first
-  Kapsule deploy.
+  OVH Managed Kubernetes deploy.
 - Consequence: first live deploy must be usable by Claude.ai and Gemini remote
   clients, not only by a Gemini-only/shared-header MVP.
 
-**Design spec**
+**Historical design spec (Scaleway baseline)**
 - `docs/superpowers/specs/2026-05-20-wp-ops-01-oauth-kapsule-design.md`
 
-**Implementation plan**
+**Historical implementation plan (Scaleway baseline)**
 - `docs/superpowers/plans/2026-05-21-wp-ops-01-oauth-kapsule-implementation.md`
 
+**Current operational runbook**
+- `deploy/ovh/README.md`
+
 **Exit**
-- MCP reachable from the personal Scaleway Kapsule environment with a repeatable
+- MCP reachable from the personal OVH Managed Kubernetes environment with a repeatable
   redeploy path
 - Claude.ai can complete an OAuth-backed remote MCP connection against the
   deployed endpoint
@@ -192,7 +196,7 @@ limits, useful for daily bookkeeping, and safe to operate.
 - Removed `@sentropic/mcp-hono`, the hand-rolled `hono-oauth-router` handlers, and
   `token-verifier`; Express (`express`, `express-rate-limit`, `cors`, `supertest`)
   already gone. Added `@hono/mcp` + `hono-rate-limiter` to dependencies.
-- Supersedes the WP-OPS-01 Express runtime; `deploy/scw` and the Docker image are
+- Supersedes the WP-OPS-01 Express runtime; `deploy/ovh` and the Docker image are
   unchanged (still run `dist/entrypoints/oauth-http.js`). Prod image smoke-validated.
 
 **Implementation plan**
@@ -219,7 +223,7 @@ MCP endpoint/config, and let us operate the service.
 - layout: move root `src/` to `apps/mcp-server`
 - orchestration: npm workspaces only plus root scripts
 - Sentropic source: npm package, exact package name still needed before install
-- deployment target: Scaleway/Kapsule
+- deployment target: OVHcloud Managed Kubernetes
 
 **Outcome**
 - decide monorepo layout
@@ -359,7 +363,7 @@ are stable enough to justify it.
 Parallelization authorized by user on 2026-05-18. Tracks 1/2/3 run concurrently.
 
 1. Track 1: close `UAT-R1`. `WP-MCP-04` is already decided (option A).
-2. Track 1/ops: choose `WP-OPS-01` scope, then ship the single-tenant Kapsule
+2. Track 1/ops: choose `WP-OPS-01` scope, then ship the single-tenant OVH Managed Kubernetes
    deployment path.
 3. Track 2: finish `WP-APP-01` cadrage, write the spec and implementation plan,
    then iterate.
@@ -372,7 +376,7 @@ Parallelization authorized by user on 2026-05-18. Tracks 1/2/3 run concurrently.
 
 - Track 1: collect real `audit_account_mapping` output on `CA-QC`, then a real
   Payevo statement, to close `UAT-R1`.
-- WP-OPS-01: review the OAuth 2.x + Kapsule deploy design spec, then write the
+- WP-OPS-01: review the OAuth 2.x deployment design spec, then write the
   implementation plan after approval.
 - Track 2: finish `WP-APP-01` cadrage by deciding shared TypeScript config,
   shared types/package strategy, and the exact Sentropic npm package name.

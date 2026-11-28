@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
-# One-command Kapsule deploy for mcp-wave. Mirrors deploy/scw/README.md.
-# Prereqs (see README "Inputs"): kubectl context on the Kapsule cluster, the
-# `mcp-wave` namespace + service account already created, docker logged in to the
-# Scaleway Container Registry, and DNS for ${MCP_WAVE_HOST} pointed at the ingress.
+# One-command OVHcloud Managed Kubernetes deploy for mcp-wave. Mirrors
+# deploy/ovh/README.md and publishes to public GHCR (ghcr.io/rhanka), pinned
+# by digest. Requires `docker login ghcr.io` with a token holding write:packages.
 set -euo pipefail
 
 # --- Required environment ---------------------------------------------------
@@ -12,7 +11,7 @@ set -euo pipefail
 : "${OAUTH_CONSENT_SECRET:?set OAUTH_CONSENT_SECRET (operator-chosen)}"
 
 # --- Optional (defaults) ----------------------------------------------------
-REGISTRY="${REGISTRY:-rg.fr-par.scw.cloud/mcp-wave}"
+REGISTRY="${REGISTRY:-ghcr.io/rhanka}"
 NAMESPACE="${NAMESPACE:-mcp-wave}"
 IMAGE="${IMAGE:-${REGISTRY}/mcp-wave:$(git rev-parse --short HEAD)}"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -39,11 +38,15 @@ docker run -d --name "${SMOKE}" -p 18099:8080 \
 trap 'docker rm -f "${SMOKE}" >/dev/null 2>&1 || true' EXIT
 for _ in $(seq 1 20); do curl -fsS http://localhost:18099/healthz >/dev/null 2>&1 && break; sleep 1; done
 curl -fsS http://localhost:18099/healthz | grep -q '"ok":true' || { echo "image smoke failed"; docker logs "${SMOKE}" | tail -20; exit 1; }
-docker rm -f "${SMOKE}" >/dev/null 2>&1 || true; trap - EXIT
+docker rm -f "${SMOKE}" >/dev/null 2>&1 || true
+trap - EXIT
 echo "==> Image smoke OK"
 
 echo "==> Pushing image"
 docker push "${IMAGE}"
+DIGEST="$(docker buildx imagetools inspect "${IMAGE}" --format "{{.Manifest.Digest}}")"
+case "${DIGEST}" in sha256:*) ;; *) echo "could not resolve pushed digest for ${IMAGE}"; exit 1 ;; esac
+echo "==> Pushed ${IMAGE%:*}@${DIGEST}"
 
 # --- Runtime config (non-secret) --------------------------------------------
 echo "==> Applying ConfigMap"
@@ -65,19 +68,19 @@ kubectl -n "${NAMESPACE}" create configmap mcp-wave-config \
   --from-literal=OAUTH_ALLOWED_REDIRECT_URIS=https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback \
   --dry-run=client -o yaml | kubectl apply -f -
 
-echo "==> Applying Secret"
+echo "==> Applying application Secret"
 kubectl -n "${NAMESPACE}" create secret generic mcp-wave-secret \
   --from-literal=WAVE_API_TOKEN="${WAVE_API_TOKEN}" \
   --from-literal=WAVE_DEFAULT_BUSINESS_ID="${WAVE_DEFAULT_BUSINESS_ID}" \
   --from-literal=OAUTH_CONSENT_SECRET="${OAUTH_CONSENT_SECRET}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
-# --- Deploy via kustomize (kubectl's built-in; no standalone `kustomize` needed) ---
+# --- Deploy via kustomize ---------------------------------------------------
 echo "==> Applying manifests"
 WORK="$(mktemp -d)"
 trap 'rm -rf "${WORK}"' EXIT
-cp -R "${REPO_ROOT}/deploy/scw/." "${WORK}/"
-sed -i "s|newName: mcp-wave|newName: ${IMAGE%:*}|; s|newTag: local|newTag: ${IMAGE##*:}|" "${WORK}/kustomization.yaml"
+cp -R "${REPO_ROOT}/deploy/ovh/." "${WORK}/"
+sed -i "s|newName: .*|newName: ${IMAGE%:*}|; s|digest: .*|digest: ${DIGEST}|" "${WORK}/kustomization.yaml"
 kubectl apply -k "${WORK}"
 kubectl -n "${NAMESPACE}" rollout status deployment/mcp-wave --timeout=180s
 
@@ -91,4 +94,4 @@ code="$(curl -s -o /dev/null -w '%{http_code}' -X POST "https://${MCP_WAVE_HOST}
   --data '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}')"
 [ "${code}" = "401" ] && echo "unauth /mcp -> 401 OK" || { echo "expected 401 from /mcp, got ${code}"; exit 1; }
 
-echo "==> Deploy complete: ${IMAGE}"
+echo "==> Deploy complete: ${IMAGE%:*}@${DIGEST} (${IMAGE##*:})"

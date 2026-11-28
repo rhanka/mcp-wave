@@ -1,0 +1,16 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: mcp-wave
+resources:
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
+  - pvc.yaml
+# Public GHCR image, pinned by digest (no imagePullSecrets). The digest below is
+# the last image released through this manifest (52de3c9, byte-identical to the
+# former Scaleway image). CI rolls out newer digests with `kubectl set image`;
+# deploy.sh rewrites this digest for operator deployments.
+images:
+  - name: mcp-wave
+    newName: ghcr.io/rhanka/mcp-wave
+    digest: sha256:5c6cd4142f4e894a3b71125c124bd97fbfb71a2d894e11fea16d68c2d1df3c22

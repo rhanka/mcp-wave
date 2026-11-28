@@ -142,13 +142,14 @@ It exposes:
 - Token revocation
 - OAuth-protected MCP at `/mcp`
 
-The deploy target for `WP-OPS-01` is Scaleway Kapsule with the image running:
+The deploy target for `WP-OPS-01` is OVHcloud Managed Kubernetes Service with
+the image running:
 
 ```bash
 node dist/entrypoints/oauth-http.js
 ```
 
-See `deploy/scw/README.md` for the build, push, deploy, smoke, rollback, secret rotation, and token revocation runbook.
+See `deploy/ovh/README.md` for the build, push, deploy, smoke, rollback, secret rotation, and token revocation runbook.
 
 ## Status
 
