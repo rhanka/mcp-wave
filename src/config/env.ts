@@ -25,6 +25,8 @@ const baseSchema = z.object({
     .default("https://claude.ai/api/mcp/auth_callback,https://claude.com/api/mcp/auth_callback"),
 });
 
+export const MIN_PRODUCTION_CONSENT_SECRET_LENGTH = 32;
+
 const envSchema = baseSchema.superRefine((v, ctx) => {
   if (v.WAVE_AUTH_MODE === "env_token" && !v.WAVE_API_TOKEN) {
     ctx.addIssue({
@@ -52,6 +54,15 @@ const envSchema = baseSchema.superRefine((v, ctx) => {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "OAUTH_CONSENT_SECRET is required in production",
+        path: ["OAUTH_CONSENT_SECRET"],
+      });
+    } else if (v.OAUTH_CONSENT_SECRET.length < MIN_PRODUCTION_CONSENT_SECRET_LENGTH) {
+      // The consent secret is the only credential guarding /authorize. Behind
+      // the shared-IP ingress a per-client attempt limit is not possible, so
+      // resistance to guessing must come from the secret itself.
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `OAUTH_CONSENT_SECRET must be at least ${MIN_PRODUCTION_CONSENT_SECRET_LENGTH} characters in production`,
         path: ["OAUTH_CONSENT_SECRET"],
       });
     }

@@ -1,0 +1,4 @@
+{
+  "_comment": "Machine-readable allowlist for .security/audit-gate.mjs. Each entry allows ONE GHSA (fields: ghsa, package, severity, reason, review_due YYYY-MM-DD UTC) to not fail the HIGH/CRITICAL gate until review_due; past that date the gate fails. Human record + justification: .security/vulnerability-register.yaml. Keep the two in sync.",
+  "allow": []
+}
